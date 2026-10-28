@@ -237,16 +237,16 @@ The repository's `global.json` selects the .NET 10 SDK family. SDKs can be insta
 Run these commands from the repository root. The solution includes the API, Worker, and the separate unit and integration test projects:
 
 ```powershell
-dotnet restore .\\LongPizzaOrderBuilder.slnx
-dotnet build .\\LongPizzaOrderBuilder.slnx --configuration Release --no-restore
-dotnet test .\\LongPizzaOrderBuilder.slnx --configuration Release --no-build --no-restore
+dotnet restore .\LongPizzaOrderBuilder.slnx
+dotnet build .\LongPizzaOrderBuilder.slnx --configuration Release --no-restore
+dotnet test .\LongPizzaOrderBuilder.slnx --configuration Release --no-build --no-restore
 ```
 
 For a quick test run, run the projects individually:
 
 ```powershell
-dotnet test .\\tests\\LongPizzaOrderBuilder.UnitTests\\LongPizzaOrderBuilder.UnitTests.csproj
-dotnet test .\\tests\\LongPizzaOrderBuilder.IntegrationTests\\LongPizzaOrderBuilder.IntegrationTests.csproj
+dotnet test .\tests\LongPizzaOrderBuilder.UnitTests\LongPizzaOrderBuilder.UnitTests.csproj
+dotnet test .\tests\LongPizzaOrderBuilder.IntegrationTests\LongPizzaOrderBuilder.IntegrationTests.csproj
 ```
 
 The local Debug solution test run passed **17 tests (0 failed, 0 skipped)**. Re-run the Release commands above before treating Release configuration or CI as verified.
@@ -379,7 +379,7 @@ Replace the example URL with your real repository URL. Review repository visibil
 - [x] Drive displayed size/topping choices from `GET /api/menu`.
 - [x] Add validation for invalid options, duplicate toppings, invalid quantities, and customer name.
 - [x] Add separate pricing unit-test and API integration-test projects.
-- [x] Run `dotnet test .\\LongPizzaOrderBuilder.slnx` locally: 17 passed, 0 failed, 0 skipped (Debug configuration).
+- [x] Run `dotnet test .\LongPizzaOrderBuilder.slnx` locally: 17 passed, 0 failed, 0 skipped (Debug configuration).
 - [ ] Verify the complete Release build/test sequence and a successful GitHub Actions run.
 
 ### P1 — reliable order lifecycle
@@ -552,7 +552,7 @@ Implement tests at three levels: fast domain unit tests, API/DB integration test
 - Keep pricing unit tests fast and run them on every pull request. Run containerized integration and end-to-end tests in CI with reliable cleanup and isolated data.
 - Seed tests with fixed menu and promotion data. Avoid wall-clock-dependent expiration tests without a controllable clock.
 - Record test commands and actual CI results here only after they have been run. A test checklist is a plan until the corresponding test exists and passes.
-- Current local baseline: `dotnet test .\\LongPizzaOrderBuilder.slnx` passed 17 tests, 0 failed, 0 skipped in Debug. Release-mode verification and GitHub Actions remain pending.
+- Current local baseline: `dotnet test .\LongPizzaOrderBuilder.slnx` passed 17 tests, 0 failed, 0 skipped in Debug. Release-mode verification and GitHub Actions remain pending.
 - Priority order: (1) start the full Compose stack locally and verify `/health` plus `/api/menu`; (2) align CI with the `.slnx` and split test-project paths and get a green workflow; (3) deploy the same built images through a controlled CI/CD path; (4) expand tests alongside persistence, messaging, and lifecycle implementation.
 
 ## Decisions still requiring product confirmation
@@ -620,7 +620,7 @@ Implement tests at three levels: fast domain unit tests, API/DB integration test
 
 - Split automated backend tests into `tests/LongPizzaOrderBuilder.UnitTests` and `tests/LongPizzaOrderBuilder.IntegrationTests`, both targeting .NET 10 and referencing the API project.
 - Added/organized `LongPizzaOrderBuilder.slnx` to include the API, Worker, and both test projects; corrected namespace/project discovery issues in VS Code.
-- **Locally verified:** `dotnet test .\\LongPizzaOrderBuilder.slnx` passed 17 tests with 0 failures and 0 skipped tests. Integration tests exercised menu, pricing preview, invalid requests, order creation, and retrieval using `WebApplicationFactory`.
+- **Locally verified:** `dotnet test .\LongPizzaOrderBuilder.slnx` passed 17 tests with 0 failures and 0 skipped tests. Integration tests exercised menu, pricing preview, invalid requests, order creation, and retrieval using `WebApplicationFactory`.
 - **Reported local Compose check:** the stack started and `/health` returned `Healthy`; follow up with `/api/menu`, container health/log review, and a repeatable smoke check.
 - **Not yet verified:** Release-mode solution build/test, frontend build in the current environment, and a green GitHub Actions run. Ensure `.github/workflows/ci.yml` references the `.slnx` and split test projects; do not treat CI/CD as verified until the workflow passes.
 
