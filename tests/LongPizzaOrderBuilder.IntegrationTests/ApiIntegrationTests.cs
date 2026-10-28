@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
-namespace LongPizzaOrderBuilder.Tests;
+namespace LongPizzaOrderBuilder.IntegrationTests;
 
 public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<global::Program>>
 {
@@ -95,13 +95,18 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<gl
     {
         var blankName = await _client.PostAsJsonAsync("/api/orders", new
         {
-            customerName = "  ", size = "Small", crust = "Classic", toppings = Array.Empty<string>(), quantity = 1
+            customerName = "  ",
+            size = "Small",
+            crust = "Classic",
+            toppings = Array.Empty<string>(),
+            quantity = 1
         });
         Assert.Equal(HttpStatusCode.BadRequest, blankName.StatusCode);
 
         var emptyOrder = await _client.PostAsJsonAsync("/api/orders", new
         {
-            customerName = "Test", items = Array.Empty<object>()
+            customerName = "Test",
+            items = Array.Empty<object>()
         });
         Assert.Equal(HttpStatusCode.BadRequest, emptyOrder.StatusCode);
     }

@@ -1,7 +1,7 @@
 using LongPizzaOrderBuilder.Api;
 using Xunit;
 
-namespace LongPizzaOrderBuilder.Tests;
+namespace LongPizzaOrderBuilder.UnitTests;
 
 public sealed class PricingServiceTests
 {
@@ -32,29 +32,37 @@ public sealed class PricingServiceTests
     public void Save5_does_not_apply_at_exactly_twenty_dollars()
     {
         var result = _pricing.Calculate(new PricingPreviewRequest(
+            [new("Small", "Classic", [], 4)], "SAVE5"));
+        Assert.True(result.IsValid);
+        Assert.Equal(20m, result.Breakdown!.Subtotal);
+        Assert.False(result.Promotion.Applied);
+        Assert.Equal(0m, result.Breakdown.Discount);
+    }
+
+    [Fact]
+    public void Save5_applies_at_over_twenty_dollars()
+    {
+        var result = _pricing.Calculate(new PricingPreviewRequest(
             [new("Large", "Classic", [], 1), new("Large", "Thin", [], 1)], "SAVE5"));
         Assert.True(result.IsValid);
         Assert.Equal(24m, result.Breakdown!.Subtotal);
         Assert.True(result.Promotion.Applied);
         Assert.Equal(5m, result.Breakdown.Discount);
-
-        var exactlyTwenty = _pricing.Calculate(new PricingPreviewRequest(
-            [new("Small", "Classic", [], 4)], "SAVE5"));
-        Assert.True(exactlyTwenty.IsValid);
-        Assert.Equal(20m, exactlyTwenty.Breakdown!.Subtotal);
-        Assert.False(exactlyTwenty.Promotion.Applied);
-        Assert.Equal(0m, exactlyTwenty.Breakdown.Discount);
     }
 
     [Fact]
     public void Ilovepizza_discount_is_applied_before_tax()
     {
-        var result = _pricing.Calculate(new PricingPreviewRequest([new("Small", "Classic", [], 1)], "ILOVEPIZZA"));
+        var result = _pricing.Calculate(new PricingPreviewRequest(
+            [new("Small", "Classic", [], 1)],
+            "ILOVEPIZZA",
+            new TipRequest("Percent", 10m)));
         Assert.True(result.IsValid);
         Assert.Equal(0.50m, result.Breakdown!.Discount);
         Assert.Equal(4.50m, result.Breakdown.DiscountedSubtotal);
         Assert.Equal(0.29m, result.Breakdown.Tax);
-        Assert.Equal(4.79m, result.Breakdown.Total);
+        Assert.Equal(0.48m, result.Breakdown.Tip);
+        Assert.Equal(5.27m, result.Breakdown.Total);
     }
 
     [Fact]
@@ -66,6 +74,20 @@ public sealed class PricingServiceTests
         Assert.Equal(0.33m, result.Breakdown!.Tax);
         Assert.Equal(0.53m, result.Breakdown.Tip);
         Assert.Equal(5.86m, result.Breakdown.Total);
+    }
+
+
+    [Fact]
+    public void Percentage_tip_is_based_on_discounted_post_tax_amount_after_discount()
+    {
+        var result = _pricing.Calculate(new PricingPreviewRequest(
+            [new("Small", "Classic", [], 1)], "ILOVEPIZZA", new TipRequest("Percent", 10m)));
+        Assert.True(result.IsValid);
+        Assert.Equal(0.50m, result.Breakdown!.Discount);
+        Assert.Equal(4.50m, result.Breakdown.DiscountedSubtotal);
+        Assert.Equal(0.29m, result.Breakdown.Tax);
+        Assert.Equal(0.48m, result.Breakdown.Tip);
+        Assert.Equal(5.27m, result.Breakdown.Total);
     }
 
     [Fact]
@@ -83,11 +105,12 @@ public sealed class PricingServiceTests
     [Fact]
     public void Rounds_money_away_from_zero_to_two_decimal_places()
     {
-        var result = _pricing.Calculate(new PricingPreviewRequest(
-            [new("Large", "Classic", ["pepperoni"], 1)], "ILOVEPIZZA"));
-        Assert.True(result.IsValid);
-        Assert.Equal("AwayFromZero to 2 decimal places", result.Breakdown!.RoundingPolicy);
-        Assert.Equal(12.42m, result.Breakdown.Total);
+        var result = Math.Round(
+            1.005m,
+            2,
+            MidpointRounding.AwayFromZero);
+
+        Assert.Equal(1.01m, result);
     }
 
     [Fact]

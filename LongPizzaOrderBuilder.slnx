@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/backend/">
+    <Project Path="src/backend/LongPizzaOrderBuilder.Api/LongPizzaOrderBuilder.Api.csproj" />
+    <Project Path="src/backend/LongPizzaOrderBuilder.Worker/LongPizzaOrderBuilder.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LongPizzaOrderBuilder.IntegrationTests/LongPizzaOrderBuilder.IntegrationTests.csproj" />
+    <Project Path="tests/LongPizzaOrderBuilder.UnitTests/LongPizzaOrderBuilder.UnitTests.csproj" />
+  </Folder>
+</Solution>

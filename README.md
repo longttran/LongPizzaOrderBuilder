@@ -77,24 +77,29 @@ For the initial rules, a topping rate is calculated against the pizza base price
 
 ### Tax, tip, and promotion rules
 
-- **Tax:** 6.5% of the order subtotal after promotion discounts and before tip.
-- **Tip:** customer may choose no tip, a percentage tip, or a custom dollar amount. The current working assumption is that percentage tips apply to the post-discount, post-tax total. Confirm this before production because tip bases can be a business/legal policy decision.
-- **`ILOVEPIZZA`:** 10% off the order subtotal before tax.
-- **`SAVE5`:** $5 off when the eligible subtotal before discount and tax is strictly greater than $20. An order subtotal of exactly $20 does not qualify.
-- **Promotion stacking:** `ILOVEPIZZA` and `SAVE5` cannot be combined. The initial design treats each as mutually exclusive.
-- **Rounding:** monetary amounts use C# `decimal`, not binary floating-point. Round monetary line/subtotal/tax/discount values consistently to two decimal places using an explicitly tested policy. The earlier example uses `MidpointRounding.AwayFromZero`; final policy should be confirmed with the business and accounting expectations.
+- **Tax:** 6.5% of the order subtotal after the promotion discount and before tip. The tip is excluded from the taxable subtotal.
+- **Tip:** customers may select no tip, a percentage tip, or a custom dollar amount. A percentage tip is calculated on the post-discount, post-tax amount. A custom dollar tip is added to the order total without being discounted or taxed.
+- **`ILOVEPIZZA`:** applies a 10% discount to the eligible order subtotal before tax.
+- **`SAVE5`:** subtracts $5 when the eligible subtotal before discount and tax is strictly greater than $20. An order subtotal of exactly $20 does not qualify.
+- **Promotion stacking:** ILOVEPIZZA and SAVE5 cannot be combined. Only one promotion may be applied to an order.
+- **Invalid promotions:** unrecognized or ineligible codes do not reduce the total. The customer receives a clear explanation.
+- **Rounding:** use C# decimal for monetary calculations and MidpointRounding.AwayFromZero to round monetary amounts to two decimal places.
 
-### Proposed calculation order
+### Tip calculation decision
+The requirements allow a tip to be entered as either a dollar amount or a percentage of the "total bill," but do not explicitly define the percentage-tip calculation base or the order of operations. We therefore adopt the following explicit policy: **percentage tips are calculated after applying the promotion and calculating tax**.
 
-1. Calculate each pizza base price by selected size and quantity.
-2. Calculate each topping surcharge as its rate multiplied by that pizza's base price and quantity.
-3. Add pizza and topping amounts to form the pre-discount subtotal.
-4. Validate and apply one eligible promotion.
-5. Calculate tax at 6.5% on the discounted subtotal.
-6. Calculate tip according to the selected tip policy.
-7. Add discounted subtotal, tax, and tip for the final total.
+This policy is a documented implementation decision rather than a rule directly stipulated by the exercise. It gives percentage tips a predictable base that includes the discounted food amount and tax, while excluding the tip itself from both discounts and tax. A custom dollar tip is added as entered.
 
-The pricing engine must be the single source of truth for both preview and final order submission. The API must validate all product, size, and topping IDs against the current menu and must never accept client-supplied prices as authoritative.
+### Calculation order
+
+1. Calculate each pizza's base price and topping charges, multiplied by quantity.
+2. Sum all line totals to produce the pre-discount subtotal.
+3. Validate and apply at most one eligible promotion.
+4. Calculate tax at 6.5% on the discounted subtotal.
+5. Calculate a percentage tip from the discounted subtotal plus tax, or use the custom dollar tip.
+6. Calculate the final total as discounted subtotal + tax + tip.
+
+The pricing engine is the single source of truth for both the live pricing preview and final order submission. The server validates menu selections and recalculates all monetary values; client-supplied prices and totals are never authoritative.
 
 ## Implemented API endpoints
 
@@ -536,7 +541,6 @@ Implement tests at three levels: fast domain unit tests, API/DB integration test
 
 ## Decisions still requiring product confirmation
 
-- Confirm that percentage tips are based on the discounted post-tax total; decide whether tip presets are 10% / 15% / 20% or another set.
 - Confirm whether a customer can edit or cancel an order after submission, and define allowed cancellation states, refunds, and payment authorization/capture behavior.
 - Define how ETA is estimated, how often it refreshes, and which delay reasons are safe to show customers.
 - Confirm the configured maximum line-item quantity, custom-tip limit, and whether duplicate toppings or multiple portions are allowed.
