@@ -1,0 +1,30 @@
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# .NET build output and IDE state
+**/bin/
+**/obj/
+**/TestResults/
+**/artifacts/
+**/publish/
+.vs/
+*.user
+*.suo
+*.cache
+
+# Node / frontend build output
+**/node_modules/
+**/dist/
+**/coverage/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Editor and operating-system files
+.idea/
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/settings.json
