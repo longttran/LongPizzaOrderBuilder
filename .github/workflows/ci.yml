@@ -9,10 +9,10 @@ permissions:
 
 jobs:
   backend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
       - name: Restore test project and dependencies
@@ -23,23 +23,23 @@ jobs:
         run: dotnet test tests/LongPizzaOrderBuilder.Tests/LongPizzaOrderBuilder.Tests.csproj --configuration Release --no-restore --verbosity normal
 
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     defaults:
       run:
         working-directory: src/frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - run: npm run build
 
   container-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [backend, frontend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build API image
         run: docker build -f deploy/docker/api.Dockerfile -t longpizzaorderbuilder-api:${{ github.sha }} .
       - name: Build worker image
@@ -58,7 +58,19 @@ jobs:
           set -euo pipefail
           cleanup() { docker compose -f compose.selfhost.yaml down -v; }
           trap cleanup EXIT
-          docker compose -f compose.selfhost.yaml up --build -d
-          curl --fail --retry 30 --retry-delay 2 --retry-connrefused http://localhost:8088/health
-          curl --fail --retry 10 --retry-delay 2 http://localhost:8088/api/menu > /tmp/longpizza-menu.json
+          
+          docker compose -f compose.selfhost.yaml up --build -d --wait --wait-timeout 120
+          
+          curl --fail --show-error \
+            --retry 30 --retry-delay 2 \
+            --retry-connrefused --retry-all-errors \
+            http://localhost:8088/health
+
+          
+          curl --fail --show-error \
+            --retry 10 --retry-delay 2 \
+            --retry-connrefused --retry-all-errors \
+            http://localhost:8088/api/menu \
+            > /tmp/longpizza-menu.json
+            
           python -m json.tool /tmp/longpizza-menu.json
