@@ -30,13 +30,6 @@ public sealed class OrderServiceApiTests : IClassFixture<WebApplicationFactory<O
         return message;
     }
 
-    private static HttpRequestMessage Put(string id, object body, string? ifMatch)
-    {
-        var message = new HttpRequestMessage(HttpMethod.Put, $"/api/orders/{id}") { Content = JsonContent.Create(body) };
-        if (ifMatch is not null) message.Headers.TryAddWithoutValidation("If-Match", ifMatch);
-        return message;
-    }
-
     private async Task<Order> Place(string name = "Service Test", int quantity = 1)
     {
         var response = await _client.SendAsync(Post("/api/orders", Body(name, quantity), Guid.NewGuid().ToString()));
@@ -59,9 +52,7 @@ public sealed class OrderServiceApiTests : IClassFixture<WebApplicationFactory<O
         var order = await response.Content.ReadFromJsonAsync<Order>();
         Assert.False(string.IsNullOrEmpty(order!.Id));
         Assert.Equal("NotStarted", order.Status);
-        Assert.Equal(1, order.Version);
-        Assert.True(order.CanCustomerChange);
-        Assert.Equal("\"1\"", response.Headers.ETag!.Tag);
+        Assert.True(order.CanCustomerCancel);
     }
 
     [Fact, Trait("Invariant", "ORD-004")]
@@ -77,7 +68,7 @@ public sealed class OrderServiceApiTests : IClassFixture<WebApplicationFactory<O
         var retry = await _client.SendAsync(Post("/api/orders", Body(name), key));
 
         Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
-        Assert.True(retry.Headers.Contains("Idempotency-Replayed"));
+        Assert.Contains("Idempotency-Replayed", retry.Headers.Select(header => header.Key));
         Assert.Equal(original!.Id, (await retry.Content.ReadFromJsonAsync<Order>())!.Id);
 
         var all = await _client.GetFromJsonAsync<List<Order>>("/api/restaurant/orders");
@@ -105,7 +96,7 @@ public sealed class OrderServiceApiTests : IClassFixture<WebApplicationFactory<O
         Assert.Equal(19, responses.Count(r => r.StatusCode == HttpStatusCode.OK));
         var ids = new HashSet<string>();
         foreach (var response in responses) ids.Add((await response.Content.ReadFromJsonAsync<Order>())!.Id);
-        Assert.Equal(1, ids.Count);
+        Assert.Single(ids);
     }
 
     [Fact, Trait("Invariant", "API-004")]
@@ -147,12 +138,11 @@ public sealed class OrderServiceApiTests : IClassFixture<WebApplicationFactory<O
     // ---- querying: LIFE-002 ----
 
     [Fact, Trait("Invariant", "LIFE-002")]
-    public async Task Querying_an_order_returns_its_status_version_and_history()
+    public async Task Querying_an_order_returns_its_status_and_history()
     {
         var order = await Place();
         var response = await _client.GetAsync($"/api/orders/{order.Id}");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("\"1\"", response.Headers.ETag!.Tag);
         var read = await response.Content.ReadFromJsonAsync<Order>();
         Assert.Equal("NotStarted", read!.Status);
         Assert.Equal(["Placed"], read.History.Select(h => h.Event));
@@ -202,8 +192,8 @@ public sealed class OrderServiceApiTests : IClassFixture<WebApplicationFactory<O
         }
         var final = await Get(order.Id);
         Assert.Equal(["Placed", "Started", "ReadyForPickup", "Delivered"], final.History.Select(h => h.Event));
-        Assert.Equal(4, final.Version);
-        Assert.False(final.CanCustomerChange);
+        Assert.Equal(4, final.History.Count);   // placed, started, ready for pickup, delivered
+        Assert.False(final.CanCustomerCancel);
         Assert.Equal(HttpStatusCode.Conflict, (await Restaurant(order.Id, "Started")).StatusCode);      // no going back
         Assert.Equal(HttpStatusCode.Conflict, (await Cancel(order.Id)).StatusCode);                      // and no cancelling a delivered order
     }
@@ -238,7 +228,7 @@ public sealed class OrderServiceApiTests : IClassFixture<WebApplicationFactory<O
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var cancelled = await response.Content.ReadFromJsonAsync<Order>();
         Assert.Equal("Cancelled", cancelled!.Status);
-        Assert.False(cancelled.CanCustomerChange);
+        Assert.False(cancelled.CanCustomerCancel);
         Assert.Equal(HttpStatusCode.NotFound, (await Cancel("does-not-exist")).StatusCode);
     }
 
@@ -253,7 +243,7 @@ public sealed class OrderServiceApiTests : IClassFixture<WebApplicationFactory<O
         var problem = await refused.Content.ReadFromJsonAsync<Problem>();
         Assert.Contains("started", problem!.Errors[0]);
         Assert.Equal("Started", problem.Order!.Status);
-        Assert.False(problem.Order.CanCustomerChange);
+        Assert.False(problem.Order.CanCustomerCancel);
         Assert.Equal("Started", (await Get(order.Id)).Status);
     }
 
@@ -268,87 +258,6 @@ public sealed class OrderServiceApiTests : IClassFixture<WebApplicationFactory<O
         Assert.Equal(["Placed", "Cancelled"], final!.History.Select(h => h.Event));
     }
 
-    // ---- updating: ORD-005, ORD-006, API-004 ----
-
-    [Fact, Trait("Invariant", "ORD-005")]
-    public async Task A_customer_can_update_an_order_that_has_not_started_and_the_service_reprices_it()
-    {
-        var order = await Place(quantity: 1);
-        var response = await _client.SendAsync(Put(order.Id, Body("Service Test", quantity: 2), "\"1\""));
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("\"2\"", response.Headers.ETag!.Tag);
-        var updated = await response.Content.ReadFromJsonAsync<Order>();
-        Assert.Equal(2, updated!.Version);
-        Assert.Equal(16.10m, updated.Total);                              // two Medium pepperoni pizzas ($7.56 each) plus 6.5% tax
-        Assert.Equal(["Placed", "Updated"], updated.History.Select(h => h.Event));
-        Assert.Equal(16.10m, (await Get(order.Id)).Total);
-    }
-
-    [Fact, Trait("Invariant", "ORD-005")]
-    public async Task Updating_after_the_restaurant_has_started_is_refused_and_nothing_changes()
-    {
-        var order = await Place();
-        await Restaurant(order.Id, "Started");
-
-        var refused = await _client.SendAsync(Put(order.Id, Body("Service Test", quantity: 5), "\"2\""));
-        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
-        var problem = await refused.Content.ReadFromJsonAsync<Problem>();
-        Assert.Equal("Started", problem!.Order!.Status);
-        Assert.Equal(1, problem.Order.Items[0].Quantity);
-        Assert.Equal(1, (await Get(order.Id)).Items[0].Quantity);
-        Assert.Equal(HttpStatusCode.NotFound, (await _client.SendAsync(Put("does-not-exist", Body("x"), "\"1\""))).StatusCode);
-    }
-
-    [Fact, Trait("Invariant", "ORD-006")]
-    public async Task Sending_the_same_update_again_is_safe()
-    {
-        var order = await Place();
-        var change = Body("Service Test", quantity: 3);
-        Assert.Equal(HttpStatusCode.OK, (await _client.SendAsync(Put(order.Id, change, "\"1\""))).StatusCode);
-
-        // The reply was lost, so the phone sends exactly the same request again, still based on version 1.
-        var retry = await _client.SendAsync(Put(order.Id, change, "\"1\""));
-        Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
-        var read = await retry.Content.ReadFromJsonAsync<Order>();
-        Assert.Equal(2, read!.Version);
-        Assert.Equal(["Placed", "Updated"], read.History.Select(h => h.Event));
-    }
-
-    [Fact, Trait("Invariant", "ORD-006")]
-    public async Task A_delayed_older_update_is_refused_with_412_and_the_current_order()
-    {
-        var order = await Place();
-        var older = Body("Service Test", quantity: 2);
-        Assert.Equal(HttpStatusCode.OK, (await _client.SendAsync(Put(order.Id, older, "\"1\""))).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await _client.SendAsync(Put(order.Id, Body("Service Test", quantity: 3), "\"2\""))).StatusCode);
-
-        var late = await _client.SendAsync(Put(order.Id, older, "\"1\""));   // the older update finally arrives
-        Assert.Equal(HttpStatusCode.PreconditionFailed, late.StatusCode);
-        var problem = await late.Content.ReadFromJsonAsync<Problem>();
-        Assert.Equal(3, problem!.Order!.Version);
-        Assert.Equal(3, (await Get(order.Id)).Items[0].Quantity);            // the newer order is untouched
-    }
-
-    [Fact, Trait("Invariant", "API-004")]
-    public async Task An_update_must_say_which_version_it_is_based_on()
-    {
-        var order = await Place();
-        var missing = await _client.SendAsync(Put(order.Id, Body("Service Test", quantity: 2), null));
-        Assert.Equal(HttpStatusCode.PreconditionRequired, missing.StatusCode);
-        Assert.Contains("If-Match", (await missing.Content.ReadFromJsonAsync<Problem>())!.Errors[0]);
-        Assert.Equal(HttpStatusCode.BadRequest, (await _client.SendAsync(Put(order.Id, Body("Service Test", quantity: 2), "banana"))).StatusCode);
-        Assert.Equal(1, (await Get(order.Id)).Version);
-    }
-
-    [Fact, Trait("Invariant", "ORD-005")]
-    public async Task An_invalid_update_is_refused_and_changes_nothing()
-    {
-        var order = await Place();
-        Assert.Equal(HttpStatusCode.BadRequest, (await _client.SendAsync(Put(order.Id, Body("Service Test", quantity: 0), "\"1\""))).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await _client.SendAsync(Put(order.Id, Body("  "), "\"1\""))).StatusCode);
-        Assert.Equal(1, (await Get(order.Id)).Version);
-    }
 
     // ---- the customer changes their mind at the moment the restaurant starts: LIFE-003 ----
 
@@ -374,45 +283,19 @@ public sealed class OrderServiceApiTests : IClassFixture<WebApplicationFactory<O
         }
     }
 
-    [Fact, Trait("Invariant", "LIFE-003")]
-    public async Task An_update_and_the_restaurant_starting_at_the_same_moment_never_start_a_changed_order_unseen()
-    {
-        for (var n = 0; n < 40; n++)
-        {
-            var order = await Place($"Update race {n}", quantity: 1);
-            var responses = await Task.WhenAll(_client.SendAsync(Put(order.Id, Body($"Update race {n}", quantity: 7), "\"1\"")), Restaurant(order.Id, "Started"));
-            var (update, start) = (responses[0], responses[1]);
-
-            Assert.Equal(HttpStatusCode.OK, start.StatusCode);                               // the restaurant's start always succeeds
-            var final = await Get(order.Id);
-            Assert.Equal("Started", final.Status);
-            if (update.StatusCode == HttpStatusCode.OK)
-            {
-                Assert.Equal(7, final.Items[0].Quantity);                                    // the update got in first: the restaurant started the new order
-                Assert.Equal(["Placed", "Updated", "Started"], final.History.Select(h => h.Event));
-            }
-            else
-            {
-                Assert.Equal(HttpStatusCode.Conflict, update.StatusCode);                    // the restaurant got in first: too late to change
-                Assert.Equal(1, final.Items[0].Quantity);
-                Assert.Equal(["Placed", "Started"], final.History.Select(h => h.Event));
-            }
-        }
-    }
-
     [Fact]
     public async Task Browsers_on_the_order_builders_address_may_call_the_service_with_the_retry_headers()
     {
         var preflight = new HttpRequestMessage(HttpMethod.Options, "/api/orders");
         preflight.Headers.Add("Origin", "http://localhost:5173");
-        preflight.Headers.Add("Access-Control-Request-Method", "PUT");
-        preflight.Headers.Add("Access-Control-Request-Headers", "content-type,idempotency-key,if-match");
+        preflight.Headers.Add("Access-Control-Request-Method", "POST");
+        preflight.Headers.Add("Access-Control-Request-Headers", "content-type,idempotency-key");
         var response = await _client.SendAsync(preflight);
         Assert.True(response.IsSuccessStatusCode);
-        Assert.Contains("If-Match", string.Join(",", response.Headers.GetValues("Access-Control-Allow-Headers")), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Idempotency-Key", string.Join(",", response.Headers.GetValues("Access-Control-Allow-Headers")), StringComparison.OrdinalIgnoreCase);
     }
 
-    public sealed record Order(string Id, string CustomerName, string Status, int Version, bool CanCustomerChange, decimal Total, List<Item> Items, List<HistoryEvent> History);
+    public sealed record Order(string Id, string CustomerName, string Status, bool CanCustomerCancel, decimal Total, List<Item> Items, List<HistoryEvent> History);
     public sealed record Item(string Size, int Quantity);
     public sealed record HistoryEvent(string Event, string Status, string Actor);
     public sealed record Problem(List<string> Errors, Order? Order);

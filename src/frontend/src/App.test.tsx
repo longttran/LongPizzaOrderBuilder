@@ -7,14 +7,13 @@ import { acceptedOrder, deferred, fakeServerPricing, menu, orderWith } from './t
 
 vi.mock('./api/pizza', async importOriginal => ({
   ...(await importOriginal<typeof import('./api/pizza')>()),
-  getMenu: vi.fn(), previewPricing: vi.fn(), placeOrder: vi.fn(), getOrder: vi.fn(), cancelOrder: vi.fn(), updateOrder: vi.fn(),
+  getMenu: vi.fn(), previewPricing: vi.fn(), placeOrder: vi.fn(), getOrder: vi.fn(), cancelOrder: vi.fn(),
 }));
 const getMenu = vi.mocked(api.getMenu);
 const previewPricing = vi.mocked(api.previewPricing);
 const placeOrder = vi.mocked(api.placeOrder);
 const getOrder = vi.mocked(api.getOrder);
 const cancelOrder = vi.mocked(api.cancelOrder);
-const updateOrder = vi.mocked(api.updateOrder);
 
 beforeEach(() => {
   getMenu.mockReset().mockResolvedValue(menu);
@@ -22,7 +21,6 @@ beforeEach(() => {
   placeOrder.mockReset();
   getOrder.mockReset().mockImplementation(async () => orderWith('NotStarted'));
   cancelOrder.mockReset();
-  updateOrder.mockReset();
 });
 
 async function setup(statusPollMs = 60_000) {
@@ -482,115 +480,5 @@ describe('UI-017: the status follows the kitchen without moving backwards', () =
       expect.stringMatching(/^Placed at/), expect.stringMatching(/^Started at .*\(restaurant\)$/),
       expect.stringMatching(/^Ready for Pickup at .*\(restaurant\)$/), expect.stringMatching(/^Delivered at .*\(restaurant\)$/),
     ]);
-  });
-});
-
-
-describe('UI-018: changing a placed order is safe on a bad connection', () => {
-  const large = [{ size: 'Large' as const, crust: 'Classic', toppings: ['pepperoni'], quantity: 1 }];
-  const changeButton = () => screen.queryByRole('button', { name: 'Change this order' });
-  const saveButton = () => screen.getByRole('button', { name: /Save changes|Saving/ });
-
-  async function startEditing(initial = orderWith('NotStarted'), pollMs = 60_000) {
-    placeOrder.mockResolvedValue(initial);
-    const user = await setup(pollMs);
-    await placeAnOrder(user);
-    await screen.findByText('Order #ABCDEF01');
-    await user.click(changeButton()!);
-    await screen.findByText(/You are changing order #ABCDEF01/);
-    await waitFor(() => expect(saveButton()).toBeEnabled());
-    return user;
-  }
-
-  it('offers Change only while the service says the order can be changed', async () => {
-    placeOrder.mockResolvedValue(orderWith('Started'));
-    const user = await setup();
-    await placeAnOrder(user);
-    await screen.findByText('Order #ABCDEF01');
-    expect(changeButton()).not.toBeInTheDocument();
-  });
-
-  it('loads the order into the builder and saves the change against the version it loaded', async () => {
-    updateOrder.mockResolvedValue(orderWith('NotStarted', { updates: 1, items: large, total: 14.3 }));
-    const user = await startEditing();
-    expect(screen.getByLabelText('Name for the order')).toHaveValue('Sam');
-    expect(screen.getByRole('radio', { name: /Medium/ })).toHaveAttribute('aria-checked', 'true');   // the order's own choices, not a fresh draft
-
-    await user.click(screen.getByRole('radio', { name: /Large/ }));
-    await expectTotal('$14.30');
-    await user.click(saveButton());
-
-    await waitFor(() => expect(updateOrder).toHaveBeenCalledTimes(1));
-    const [id, body, version] = updateOrder.mock.calls[0];
-    expect([id, version]).toEqual(['abcdef0123456789', 1]);
-    expect(body.items).toEqual(large);
-    expect(JSON.stringify(body)).not.toMatch(/total|price|subtotal|tax|discount/i);   // choices only
-    expect(await screen.findByText(/Total: \$14\.30/)).toBeInTheDocument();         // the service's repriced total
-    expect(screen.queryByText(/You are changing/)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Place my order/ })).toBeInTheDocument();
-  });
-
-  it('if the restaurant started first, shows the reason and the real status and leaves edit mode', async () => {
-    updateOrder.mockRejectedValue(new api.ApiError('The restaurant has already started this order, so it can no longer be changed.', 409,
-      ['The restaurant has already started this order, so it can no longer be changed.'], orderWith('Started')));
-    const user = await startEditing();
-    await user.click(saveButton());
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('restaurant has already started this order');
-    expect(screen.getByText('Started')).toBeInTheDocument();
-    expect(screen.queryByText(/You are changing/)).not.toBeInTheDocument();
-    expect(changeButton()).not.toBeInTheDocument();
-  });
-
-  it('if the order changed since it was loaded, loads the latest version and saves against that one', async () => {
-    updateOrder.mockRejectedValueOnce(new api.ApiError('This order has changed since you loaded it.', 412, [],
-      orderWith('NotStarted', { updates: 1, items: large, total: 14.3 })));
-    updateOrder.mockResolvedValueOnce(orderWith('NotStarted', { updates: 2, items: large, total: 14.3 }));
-    const user = await startEditing();
-    await user.click(saveButton());
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('changed since you opened it');
-    await waitFor(() => expect(screen.getByRole('radio', { name: /Large/ })).toHaveAttribute('aria-checked', 'true'));   // the latest content is now in the builder
-    await waitFor(() => expect(saveButton()).toBeEnabled());
-    await user.click(saveButton());
-    await waitFor(() => expect(updateOrder).toHaveBeenCalledTimes(2));
-    expect(updateOrder.mock.calls[1][2]).toBe(2);       // now based on the version it was refused for
-  });
-
-  it('when a save cannot be confirmed, says so, and pressing Save again sends the very same change', async () => {
-    updateOrder.mockRejectedValueOnce(new api.ApiError('The server did not answer in time.'));
-    updateOrder.mockResolvedValueOnce(orderWith('NotStarted', { updates: 1, items: large, total: 14.3 }));
-    const user = await startEditing();
-    await user.click(screen.getByRole('radio', { name: /Large/ }));
-    await expectTotal('$14.30');
-    await user.click(saveButton());
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('may or may not have been saved');
-    await user.click(saveButton());
-    await waitFor(() => expect(updateOrder).toHaveBeenCalledTimes(2));
-    expect(updateOrder.mock.calls[1][1]).toEqual(updateOrder.mock.calls[0][1]);   // same change
-    expect(updateOrder.mock.calls[1][2]).toBe(updateOrder.mock.calls[0][2]);      // same version, so the service recognises a repeat
-    expect(await screen.findByText(/Total: \$14\.30/)).toBeInTheDocument();
-  });
-
-  it('leaves edit mode and says why if the restaurant starts while the customer is still editing', async () => {
-    let current = orderWith('NotStarted');
-    getOrder.mockImplementation(async () => current);
-    const user = await startEditing(current, 15);
-    current = orderWith('Started');
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('started this order while you were changing it');
-    expect(screen.queryByText(/You are changing/)).not.toBeInTheDocument();
-    expect(screen.getByText('Started')).toBeInTheDocument();
-    expect(updateOrder).not.toHaveBeenCalled();
-    expect(user).toBeDefined();
-  });
-
-  it('lets the customer stop editing without saving', async () => {
-    const user = await startEditing();
-    await user.click(screen.getByRole('button', { name: 'Stop editing' }));
-    expect(screen.queryByText(/You are changing/)).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Name for the order')).toHaveValue('');
-    expect(updateOrder).not.toHaveBeenCalled();
   });
 });

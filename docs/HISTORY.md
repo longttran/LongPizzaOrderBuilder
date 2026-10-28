@@ -24,6 +24,11 @@
 
 ## Revision history
 
+### 2026-10-28 — Fixes from the first real build (Windows, stock xunit and its analyzers)
+- **Compile error CS0433 (4 errors):** the order service's `Program.cs` used top-level statements, which generate a type named `Program`; the builder API already has one, and the integration-test project references both, so the type name was ambiguous. The service's entry point is now an explicit `OrderServiceProgram.Main`. This could not be seen earlier because the stand-in test runner compiled everything into one assembly; the check harness now builds the tests as a separate assembly referencing both back ends, which reproduces the error exactly.
+- **41 xunit analyzer warnings:** `xUnit2013` (`Assert.Equal(0|1, collection.Count)` is now `Assert.Empty` / `Assert.Single`), `xUnit2017` (`Assert.True(set.Contains(x))` is now `Assert.Contains`), and `xUnit1031` (the race tests blocked on tasks with `Wait`, `WaitAll` and `.Result`; they are now `async` and `await`).
+- Still true: the stock xunit runner has not been run by the author of these changes. Please run `dotnet test LongPizzaOrderBuilder.slnx`.
+
 ### 2026-10-28 — Separate order service, restaurant side, cancel, and the README rewrite
 - **Order service:** a new process (`LongPizzaOrderBuilder.OrderService`, port 8090) owns orders and their lifecycle. The builder API (port 8080) now offers only the menu and a price preview. Pricing moved to a shared library, `LongPizzaOrderBuilder.Pricing`, used by both (ADR-0009).
 - **Statuses:** Not Started, Started, Ready for Pickup, Delivered, plus Cancelled. A customer can cancel only while Not Started; the restaurant moves one step forward and cannot cancel. `Idempotency-Key` is now required on create.

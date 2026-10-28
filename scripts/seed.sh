@@ -16,5 +16,5 @@ b=$(place "Ben (started)" Medium '["sausage","onions"]');            move "$b" S
 c=$(place "Cy (ready for pickup)" Large '["bacon"]');               move "$c" Started; move "$c" ReadyForPickup
 d=$(place "Dee (delivered)" Medium '[]');                           move "$d" Started; move "$d" ReadyForPickup; move "$d" Delivered
 e=$(place "Eli (cancelled)" Small '["pineapple"]');                 curl -s -o /dev/null -X POST "$BASE/api/orders/$e/cancel"
-echo "Seeded 5 orders. Not started: $a  (you can still change or cancel it)"
+echo "Seeded 5 orders. Not started: $a  (you can still cancel it)"
 ORDER_SERVICE_URL="$BASE" "$(dirname "$0")/restaurant.sh" list

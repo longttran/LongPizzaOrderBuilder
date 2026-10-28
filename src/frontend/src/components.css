@@ -39,10 +39,8 @@ select.name-input,.name-input+.name-input{margin-bottom:10px}
 .order-status-head{display:flex;justify-content:space-between;align-items:center}
 .status-line{margin:8px 0}
 .status-line span{display:inline-block;width:1.2em;text-align:center}
-.order-actions{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0}
-.change-order,.cancel-order{margin:0;padding:9px 14px;border:1px solid #e45d37;border-radius:10px;background:#fff;color:#b6411f;font:inherit;font-weight:700;cursor:pointer}
-.change-order:disabled,.cancel-order:disabled{opacity:.6;cursor:wait}
-.change-order{border-color:#d9d0c2;color:#39352e}
-.editing-banner{margin:0 0 12px;padding:10px 12px;border:1px dashed #e45d37;border-radius:10px;background:#fff8f3;font-size:.8rem}
+
+.cancel-order{margin:0;padding:9px 14px;border:1px solid #e45d37;border-radius:10px;background:#fff;color:#b6411f;font:inherit;font-weight:700;cursor:pointer}
+.cancel-order:disabled{opacity:.6;cursor:wait}
 .order-status details{margin-top:8px}
 .history{padding-left:20px;margin:8px 0 0;color:#6d655a}

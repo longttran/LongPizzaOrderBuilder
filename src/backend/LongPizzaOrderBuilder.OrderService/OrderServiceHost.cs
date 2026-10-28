@@ -17,10 +17,10 @@ public sealed class OrderServiceHost
         builder.Services.AddHealthChecks();
 
         // The order builder's page runs in a browser on another address, so the browser asks permission first (CORS).
-        // The retry headers must be allowed, and ETag must be readable, or the browser would hide them.
+        // The retry header must be allowed, and Idempotency-Replayed must be readable, or the browser would hide them.
         var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? ["http://localhost:5173"];
         builder.Services.AddCors(options => options.AddPolicy("order-builder", policy => policy
-            .WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().WithExposedHeaders("ETag", "Idempotency-Replayed")));
+            .WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().WithExposedHeaders("Idempotency-Replayed")));
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton(PizzaMenu.Default);

@@ -40,7 +40,6 @@ export type CartAction =
   | { type: 'setTipPercent'; percent: number }
   | { type: 'setCustomTip'; text: string }
   /** Replace the draft with an existing order's contents, to edit it. */
-  | { type: 'load'; items: PizzaOrderItemRequest[]; promoCode: string | null; tip: TipRequest | null }
   | { type: 'reset' };
 
 export function createInitialState(): CartState {
@@ -112,15 +111,6 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
       return { ...state, tip: { ...state.tip, percent: action.percent } };
     case 'setCustomTip':
       return { ...state, tip: { ...state.tip, customText: action.text } };
-    case 'load': {
-      const lines = action.items.map((item, index): CartLine => ({ id: `line-${state.nextId + index}`, size: item.size, crust: item.crust, toppings: [...item.toppings], quantity: item.quantity }));
-      const tip: TipDraft = action.tip?.type === 'Percent'
-        ? { mode: 'Percent', percent: action.tip.percent ?? 15, customText: '' }
-        : action.tip?.type === 'Custom'
-          ? { mode: 'Custom', percent: 15, customText: String(action.tip.amount ?? '') }
-          : { mode: 'None', percent: 15, customText: '' };
-      return { lines, selectedId: lines[0]?.id ?? null, promoCode: action.promoCode ?? '', tip, nextId: state.nextId + lines.length };
-    }
     case 'reset':
       return createInitialState();
   }

@@ -53,18 +53,14 @@ export type PizzaOrder = {
   id: string;
   customerName: string;
   items: PizzaOrderItemRequest[];
-  promoCode: string | null;
-  tip: TipRequest | null;
   pricing: PricingBreakdown;
   total: number;
   status: OrderStatus;
-  /** Counts the order's history events. Changes are made against a version, so a delayed request cannot overwrite a newer one. */
-  version: number;
   createdAt: string;
   updatedAt: string;
   history: OrderEvent[];
-  /** The service decides whether the customer can still update or cancel, so the browser never copies that rule. */
-  canCustomerChange: boolean;
+  /** The service decides whether the customer can still cancel, so the browser never copies that rule. */
+  canCustomerCancel: boolean;
 };
 
 /** Thrown for transport failures and unexpected HTTP errors. Validation failures are NOT thrown (see previewPricing). */
@@ -155,21 +151,6 @@ export async function getOrder(id: string, signal?: AbortSignal): Promise<PizzaO
   const body = await readJson<PizzaOrder>(response);
   if (!response.ok || !body) throw new ApiError(`Order lookup failed (${response.status})`, response.status);
   return body;
-}
-
-/**
- * Replaces an order's contents, based on `version` (the version the customer loaded). Only works while the order is NotStarted.
- * Sending the same update again is safe. Throws an ApiError carrying the order as it now is for 409 (the restaurant started)
- * and 412 (the order changed since `version`).
- */
-export async function updateOrder(id: string, order: PizzaOrderRequest, version: number, options: OrderCallOptions = {}): Promise<PizzaOrder> {
-  const response = await send(`/api/orders/${encodeURIComponent(id)}`,
-    { method: 'PUT', body: JSON.stringify(order), headers: { 'If-Match': `"${version}"` }, signal: options.signal }, options.timeoutMs ?? ORDER_TIMEOUT_MS, orderServiceUrl);
-  if (response.ok) {
-    const body = await readJson<PizzaOrder>(response);
-    if (body) return body;
-  }
-  throw await failure(response, 'Update request failed');
 }
 
 /**

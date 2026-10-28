@@ -64,7 +64,6 @@ public sealed class OrderLifecycleTests
                     Assert.Equal(expected == ChangeOutcome.Applied ? to : from, after.Status);
                     if (expected != ChangeOutcome.Applied)
                     {
-                        Assert.Equal(before.Version, after.Version);
                         Assert.Equal(before.History.Count, after.History.Count);
                         Assert.Equal(before.UpdatedAt, after.UpdatedAt);
                     }
@@ -101,11 +100,7 @@ public sealed class OrderLifecycleTests
             var order = NewOrder(store, $"Customer {n}");
             for (var attempt = 0; attempt < random.Next(1, 14); attempt++)
             {
-                var current = store.Find(order.Id)!;
-                if (random.Next(3) == 0)
-                    store.Update(order.Id, Request($"Customer {n}", random.Next(1, 11)), current.Version);
-                else
-                    store.Transition(order.Id, All[random.Next(All.Length)], random.Next(2) == 0 ? OrderActor.Customer : OrderActor.Restaurant);
+                store.Transition(order.Id, All[random.Next(All.Length)], random.Next(2) == 0 ? OrderActor.Customer : OrderActor.Restaurant);
             }
             AssertHistoryIsFaithful(store.Find(order.Id)!);
         }
@@ -114,7 +109,6 @@ public sealed class OrderLifecycleTests
     internal static void AssertHistoryIsFaithful(Order order)
     {
         var history = order.History;
-        Assert.Equal(history.Count, order.Version);                          // the version counts the recorded events
         Assert.Equal(new OrderEvent("Placed", OrderStatus.NotStarted, order.CreatedAt, OrderActor.Customer), history[0]);
         Assert.Equal(history[^1].Status, order.Status);                      // the status is where the story ended
         Assert.Equal(history[^1].At, order.UpdatedAt);
@@ -131,13 +125,13 @@ public sealed class OrderLifecycleTests
             else
             {
                 Assert.Equal(change.Status.ToString(), change.Event);
-                Assert.True(Legal.Contains((previous.Status, change.Status, change.Actor)));   // every recorded move was legal
+                Assert.Contains((previous.Status, change.Status, change.Actor), Legal);   // every recorded move was legal
             }
         }
     }
 
     [Fact, Trait("Invariant", "LIFE-003")]
-    public void While_the_restaurant_is_half_way_through_starting_an_order_a_cancel_must_wait_and_is_then_refused()
+    public async Task While_the_restaurant_is_half_way_through_starting_an_order_a_cancel_must_wait_and_is_then_refused()
     {
         // The restaurant has checked the order (NotStarted -> Started is fine) but has not yet written the change. Freeze it there,
         // then send the customer's cancel. A correct store makes the cancel wait; it then sees Started and is refused.
@@ -149,22 +143,23 @@ public sealed class OrderLifecycleTests
         var restaurant = DedicatedThread.Run(() => store.Transition(order.Id, OrderStatus.Started, OrderActor.Restaurant));
         Assert.True(clock.Paused.Wait(TimeSpan.FromSeconds(5)), "The restaurant never reached the pause point.");
         var cancel = DedicatedThread.Run(() => store.Transition(order.Id, OrderStatus.Cancelled, OrderActor.Customer));
-        var cancelGotInEarly = cancel.Wait(TimeSpan.FromMilliseconds(300));
+        var cancelGotInEarly = await DedicatedThread.FinishesWithin(cancel, TimeSpan.FromMilliseconds(300));
         clock.Resume.Set();
-        Task.WaitAll(restaurant, cancel);
+        var restaurantResult = await restaurant;
+        var cancelResult = await cancel;
 
         Assert.False(cancelGotInEarly, "The cancel was allowed in while the restaurant's change was half done.");
-        Assert.Equal(ChangeOutcome.Applied, restaurant.Result.Outcome);
-        Assert.Equal(ChangeOutcome.Refused, cancel.Result.Outcome);
-        Assert.Contains("started", cancel.Result.Message);
-        Assert.Equal(OrderStatus.Started, cancel.Result.Order!.Status);   // the customer is told the truth
+        Assert.Equal(ChangeOutcome.Applied, restaurantResult.Outcome);
+        Assert.Equal(ChangeOutcome.Refused, cancelResult.Outcome);
+        Assert.Contains("started", cancelResult.Message);
+        Assert.Equal(OrderStatus.Started, cancelResult.Order!.Status);   // the customer is told the truth
         var final = store.Find(order.Id)!;
         Assert.Equal(OrderStatus.Started, final.Status);
         Assert.Equal(2, final.History.Count);
     }
 
     [Fact, Trait("Invariant", "LIFE-003")]
-    public void While_a_customer_cancel_is_half_way_through_the_restaurant_must_wait_and_is_then_refused()
+    public async Task While_a_customer_cancel_is_half_way_through_the_restaurant_must_wait_and_is_then_refused()
     {
         // The same race the other way round: the cancel got there first.
         var clock = new PausingClock();
@@ -175,14 +170,15 @@ public sealed class OrderLifecycleTests
         var cancel = DedicatedThread.Run(() => store.Transition(order.Id, OrderStatus.Cancelled, OrderActor.Customer));
         Assert.True(clock.Paused.Wait(TimeSpan.FromSeconds(5)), "The cancel never reached the pause point.");
         var restaurant = DedicatedThread.Run(() => store.Transition(order.Id, OrderStatus.Started, OrderActor.Restaurant));
-        var restaurantGotInEarly = restaurant.Wait(TimeSpan.FromMilliseconds(300));
+        var restaurantGotInEarly = await DedicatedThread.FinishesWithin(restaurant, TimeSpan.FromMilliseconds(300));
         clock.Resume.Set();
-        Task.WaitAll(cancel, restaurant);
+        var cancelResult = await cancel;
+        var restaurantResult = await restaurant;
 
         Assert.False(restaurantGotInEarly, "The restaurant was allowed in while the cancel was half done.");
-        Assert.Equal(ChangeOutcome.Applied, cancel.Result.Outcome);
-        Assert.Equal(ChangeOutcome.Refused, restaurant.Result.Outcome);
-        Assert.Equal(OrderStatus.Cancelled, restaurant.Result.Order!.Status);
+        Assert.Equal(ChangeOutcome.Applied, cancelResult.Outcome);
+        Assert.Equal(ChangeOutcome.Refused, restaurantResult.Outcome);
+        Assert.Equal(OrderStatus.Cancelled, restaurantResult.Order!.Status);
         Assert.Equal(OrderStatus.Cancelled, store.Find(order.Id)!.Status);
     }
 
@@ -196,15 +192,14 @@ public sealed class OrderLifecycleTests
             var random = new Random(worker);
             for (var i = 0; i < 300; i++)
             {
-                if (random.Next(3) == 0) store.Update(order.Id, Request("Sam", random.Next(1, 11)), store.Find(order.Id)!.Version);
-                else store.Transition(order.Id, All[random.Next(All.Length)], random.Next(2) == 0 ? OrderActor.Customer : OrderActor.Restaurant);
+                store.Transition(order.Id, All[random.Next(All.Length)], random.Next(2) == 0 ? OrderActor.Customer : OrderActor.Restaurant);
             }
         });
         AssertHistoryIsFaithful(store.Find(order.Id)!);
     }
 
     [Fact, Trait("Invariant", "LIFE-004")]
-    public void The_restaurant_can_never_cancel_and_the_service_says_whether_the_customer_can_still_change_the_order()
+    public void The_restaurant_can_never_cancel_and_the_service_says_whether_the_customer_can_still_cancel()
     {
         foreach (var from in All)
         {
@@ -215,7 +210,7 @@ public sealed class OrderLifecycleTests
             // Refused, except that asking for the status an order already has is a harmless no-op.
             Assert.Equal(from == OrderStatus.Cancelled ? ChangeOutcome.NoChange : ChangeOutcome.Refused, byRestaurant.Outcome);
             Assert.Equal(from == OrderStatus.Cancelled, store.Find(order.Id)!.Status == OrderStatus.Cancelled);
-            Assert.Equal(from == OrderStatus.NotStarted, order.CanCustomerChange);
+            Assert.Equal(from == OrderStatus.NotStarted, order.CanCustomerCancel);
         }
     }
 
@@ -228,7 +223,7 @@ public sealed class OrderLifecycleTests
         Assert.Equal(ChangeOutcome.Refused, refused.Outcome);
         Assert.Contains("started", refused.Message);
         Assert.Equal(OrderStatus.Started, refused.Order!.Status);
-        Assert.False(refused.Order.CanCustomerChange);
+        Assert.False(refused.Order.CanCustomerCancel);
     }
 
     [Fact, Trait("Invariant", "LIFE-005")]
@@ -240,7 +235,7 @@ public sealed class OrderLifecycleTests
         var once = store.Find(order.Id)!;
         Assert.Equal(ChangeOutcome.NoChange, store.Transition(order.Id, OrderStatus.Cancelled, OrderActor.Customer).Outcome);
         var twice = store.Find(order.Id)!;
-        Assert.Equal(once.Version, twice.Version);
+        Assert.Equal(once.History.Count, twice.History.Count);
         Assert.Equal(once.UpdatedAt, twice.UpdatedAt);
 
         var kitchen = Reach(store, OrderStatus.Started);
@@ -253,13 +248,12 @@ public sealed class OrderLifecycleTests
     {
         var store = NewStore();
         var order = store.Create(Request(quantity: 2, promo: "ILOVEPIZZA", tip: new TipRequest("Percent", 15m)), "k").Order;
-        string Content(Order o) => JsonSerializer.Serialize(new { o.CustomerName, o.Items, o.PromoCode, o.Tip, o.Pricing, o.CreatedAt });
+        string Content(Order o) => JsonSerializer.Serialize(new { o.CustomerName, o.Items, o.Pricing, o.CreatedAt });
         var before = Content(order);
 
         store.Transition(order.Id, OrderStatus.Started, OrderActor.Restaurant);
         store.Transition(order.Id, OrderStatus.Started, OrderActor.Restaurant);      // repeat
         store.Transition(order.Id, OrderStatus.Cancelled, OrderActor.Customer);      // refused
-        store.Update(order.Id, Request(quantity: 9), store.Find(order.Id)!.Version); // refused
         store.Transition(order.Id, OrderStatus.ReadyForPickup, OrderActor.Restaurant);
         store.Transition(order.Id, OrderStatus.Delivered, OrderActor.Restaurant);
 

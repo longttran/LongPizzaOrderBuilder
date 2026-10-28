@@ -3,7 +3,7 @@ namespace LongPizzaOrderBuilder.OrderService;
 /// <summary>Where an order is. Serialized as its name, for example "ReadyForPickup".</summary>
 public enum OrderStatus
 {
-    /// <summary>Accepted. The restaurant has not started. The customer can still change or cancel it.</summary>
+    /// <summary>Accepted. The restaurant has not started. The customer can still cancel it.</summary>
     NotStarted,
     /// <summary>The restaurant is making it.</summary>
     Started,
@@ -24,7 +24,7 @@ public enum OrderActor
     Restaurant,
 }
 
-/// <summary>One entry in an order's history. <see cref="Event"/> is "Placed", "Updated", or the name of the status the order moved to.</summary>
+/// <summary>One entry in an order's history. <see cref="Event"/> is "Placed", or the name of the status the order moved to.</summary>
 public sealed record OrderEvent(string Event, OrderStatus Status, DateTimeOffset At, OrderActor Actor);
 
 /// <summary>
@@ -34,7 +34,7 @@ public sealed record OrderEvent(string Event, OrderStatus Status, DateTimeOffset
 ///   NotStarted -> Cancelled                                    (only the customer, only before the restaurant starts)
 ///   Delivered, Cancelled                                       (final)
 /// </code>
-/// The customer can also update an order, but only while it is NotStarted (see <see cref="OrderStore.Update"/>).
+/// The customer can cancel only while the order is NotStarted. (Changing a placed order is not built; see docs/FUTURE-WORK.md.)
 /// </summary>
 public static class OrderLifecycle
 {
@@ -59,6 +59,6 @@ public static class OrderLifecycle
     public static bool IsActorAllowed(OrderActor actor, OrderStatus from, OrderStatus to) =>
         actor == OrderActor.Customer ? to == OrderStatus.Cancelled : to != OrderStatus.Cancelled;
 
-    /// <summary>Whether the customer can still update or cancel. The service decides this, so the browser never has to copy the rule.</summary>
-    public static bool CanCustomerChange(OrderStatus status) => status == OrderStatus.NotStarted;
+    /// <summary>Whether the customer can still cancel. The service decides this, so the browser never has to copy the rule.</summary>
+    public static bool CanCustomerCancel(OrderStatus status) => status == OrderStatus.NotStarted;
 }

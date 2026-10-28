@@ -8,37 +8,32 @@ public sealed record OrderRequest(string CustomerName, List<PizzaOrderItemReques
 
 /// <summary>
 /// An immutable snapshot of an order. Every change produces a new snapshot, so a reader can never see a status that disagrees
-/// with the history. <see cref="Version"/> counts the recorded events (it is 1 when the order is first placed).
+/// with the history. The items and the accepted price never change after the order is placed.
 /// </summary>
 public sealed record Order(
     string Id,
     string CustomerName,
     IReadOnlyList<PizzaOrderItemRequest> Items,
-    string? PromoCode,
-    TipRequest? Tip,
     PricingBreakdown Pricing,
     OrderStatus Status,
-    int Version,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     IReadOnlyList<OrderEvent> History)
 {
     public decimal Total => Pricing.Total;
 
-    /// <summary>Whether the customer can still update or cancel this order.</summary>
-    public bool CanCustomerChange => OrderLifecycle.CanCustomerChange(Status);
+    /// <summary>Whether the customer can still cancel this order. The service decides, so the browser never copies the rule.</summary>
+    public bool CanCustomerCancel => OrderLifecycle.CanCustomerCancel(Status);
 }
 
 public enum ChangeOutcome
 {
     /// <summary>The order changed.</summary>
     Applied,
-    /// <summary>The order was already as asked (same status, or identical content), so nothing changed. Repeating a request is safe.</summary>
+    /// <summary>The order was already in the requested status, so nothing changed. Repeating a request is safe.</summary>
     NoChange,
     /// <summary>Not allowed now (wrong status, or not for this actor). Nothing changed.</summary>
     Refused,
-    /// <summary>The update was based on an out-of-date version. Nothing changed.</summary>
-    Stale,
     NotFound,
 }
 
@@ -56,7 +51,7 @@ public sealed class IdempotencyConflictException()
 /// The in-memory order store. Every read and every change goes through one lock, so:
 /// <list type="bullet">
 /// <item>checking an order's status and applying a change happen as one step, which means two simultaneous requests (a customer
-/// cancelling or updating while the restaurant starts) are decided one after the other and exactly one wins;</item>
+/// cancelling while the restaurant starts) are decided one after the other and exactly one wins;</item>
 /// <item>checking an idempotency key and saving the order happen as one step, so duplicates and retries create exactly one order;</item>
 /// <item>readers only see complete, immutable <see cref="Order"/> snapshots.</item>
 /// </list>
@@ -111,55 +106,11 @@ public sealed class OrderStore
             var pricing = Price(request);
             var now = _time.GetUtcNow();
             var order = new Order(
-                Guid.NewGuid().ToString("N"), name, CopyItems(request), CleanPromo(request), request.Tip, pricing,
-                OrderStatus.NotStarted, 1, now, now, [new OrderEvent("Placed", OrderStatus.NotStarted, now, OrderActor.Customer)]);
+                Guid.NewGuid().ToString("N"), name, CopyItems(request), pricing,
+                OrderStatus.NotStarted, now, now, [new OrderEvent("Placed", OrderStatus.NotStarted, now, OrderActor.Customer)]);
             _orders.Add(order.Id, order);
             _keys.Add(idempotencyKey, (fingerprint, order.Id));
             return new CreateResult(order, Replayed: false);
-        }
-    }
-
-    /// <summary>
-    /// Replaces the content of an order. Allowed only while the order is NotStarted, and only if it is based on the order's current
-    /// <paramref name="expectedVersion"/>. The service reprices it. Sending identical content again is a harmless no-op, which is
-    /// what makes a retry after a lost reply safe; an update based on an old version is refused so a delayed request can never overwrite a newer one.
-    /// </summary>
-    /// <exception cref="PricingValidationException">The new content is invalid.</exception>
-    public ChangeResult Update(string id, OrderRequest request, int expectedVersion)
-    {
-        var fingerprint = Fingerprint(request);
-        lock (_gate)
-        {
-            if (!_orders.TryGetValue(id, out var order))
-                return new ChangeResult(ChangeOutcome.NotFound, null, "Order not found.");
-
-            if (order.Status == OrderStatus.NotStarted && Fingerprint(ToRequest(order)) == fingerprint)
-                return new ChangeResult(ChangeOutcome.NoChange, order, "The order already has these contents.");
-
-            if (order.Status != OrderStatus.NotStarted)
-                return new ChangeResult(ChangeOutcome.Refused, order, order.Status == OrderStatus.Cancelled
-                    ? "This order was cancelled, so it can no longer be changed."
-                    : "The restaurant has already started this order, so it can no longer be changed.");
-
-            if (expectedVersion != order.Version)
-                return new ChangeResult(ChangeOutcome.Stale, order, "This order has changed since you loaded it. Review the latest version and try again.");
-
-            var name = ValidName(request);
-            var pricing = Price(request);
-            var now = _time.GetUtcNow();
-            var changed = order with
-            {
-                CustomerName = name,
-                Items = CopyItems(request),
-                PromoCode = CleanPromo(request),
-                Tip = request.Tip,
-                Pricing = pricing,
-                Version = order.Version + 1,
-                UpdatedAt = now,
-                History = [.. order.History, new OrderEvent("Updated", OrderStatus.NotStarted, now, OrderActor.Customer)],
-            };
-            _orders[id] = changed;
-            return new ChangeResult(ChangeOutcome.Applied, changed, null);
         }
     }
 
@@ -185,7 +136,6 @@ public sealed class OrderStore
             var changed = order with
             {
                 Status = to,
-                Version = order.Version + 1,
                 UpdatedAt = now,
                 History = [.. order.History, new OrderEvent(to.ToString(), to, now, actor)],
             };
@@ -222,11 +172,7 @@ public sealed class OrderStore
     private static List<PizzaOrderItemRequest> CopyItems(OrderRequest request) =>
         request.Items.Select(item => item with { Toppings = [.. item.Toppings] }).ToList();
 
-    private static string? CleanPromo(OrderRequest request) => string.IsNullOrWhiteSpace(request.PromoCode) ? null : request.PromoCode.Trim();
-
-    private static OrderRequest ToRequest(Order order) => new(order.CustomerName, [.. order.Items], order.PromoCode, order.Tip);
-
-    /// <summary>A canonical text form of what the customer asked for, used to tell a genuine retry from a reused key or a different update.</summary>
+    /// <summary>A canonical text form of what the customer asked for, used to tell a genuine retry from a reused key.</summary>
     private static string Fingerprint(OrderRequest request) =>
         JsonSerializer.Serialize(new
         {

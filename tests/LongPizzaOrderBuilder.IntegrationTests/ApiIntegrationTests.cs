@@ -5,6 +5,7 @@ using Xunit;
 
 namespace LongPizzaOrderBuilder.IntegrationTests;
 
+/// <summary>The order builder's own API: the menu and the price preview. Orders are handled by the separate order service.</summary>
 public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<global::Program>>
 {
     private readonly HttpClient _client;
@@ -21,7 +22,7 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<gl
         var response = await _client.GetFromJsonAsync<MenuResponse>("/api/menu");
 
         Assert.NotNull(response);
-        Assert.Equal([5m, 7m, 12m], response.Sizes.Select(size => size.Price));
+        Assert.Equal(new[] { 5m, 7m, 12m }, response.Sizes.Select(size => size.Price));
         Assert.Equal(0.065m, response.TaxRate);
         Assert.Equal(0.08m, response.Toppings.Single(topping => topping.Id == "pepperoni").Rate);
         Assert.Equal(0.11m, response.Toppings.Single(topping => topping.Id == "bacon").Rate);
@@ -64,62 +65,9 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<gl
         Assert.Contains(result.Errors, error => error.Contains("valid pizza size", StringComparison.OrdinalIgnoreCase));
     }
 
-    [Fact]
-    [Trait("Invariant", "ORD-002")]
-    public async Task Order_submission_returns_accepted_server_total_and_order_can_be_retrieved()
-    {
-        var response = await _client.PostAsJsonAsync("/api/orders", new
-        {
-            customerName = "Integration Test",
-            size = "Small",
-            crust = "Classic",
-            toppings = new[] { "pepperoni" },
-            quantity = 1,
-            promoCode = (string?)null,
-            tip = new { type = "None" }
-        });
-
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        var order = await response.Content.ReadFromJsonAsync<OrderResponse>();
-        Assert.NotNull(order);
-        Assert.Equal("Integration Test", order.CustomerName);
-        Assert.Equal(5.75m, order.Total);
-        Assert.Equal("Submitted", order.Status);
-        Assert.NotNull(response.Headers.Location);
-
-        var getResponse = await _client.GetAsync(response.Headers.Location);
-        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
-        var retrieved = await getResponse.Content.ReadFromJsonAsync<OrderResponse>();
-        Assert.NotNull(retrieved);
-        Assert.Equal(order.Id, retrieved.Id);
-    }
-
-    [Fact]
-    [Trait("Invariant", "ORD-001")]
-    public async Task Order_submission_rejects_blank_customer_name_and_empty_order()
-    {
-        var blankName = await _client.PostAsJsonAsync("/api/orders", new
-        {
-            customerName = "  ",
-            size = "Small",
-            crust = "Classic",
-            toppings = Array.Empty<string>(),
-            quantity = 1
-        });
-        Assert.Equal(HttpStatusCode.BadRequest, blankName.StatusCode);
-
-        var emptyOrder = await _client.PostAsJsonAsync("/api/orders", new
-        {
-            customerName = "Test",
-            items = Array.Empty<object>()
-        });
-        Assert.Equal(HttpStatusCode.BadRequest, emptyOrder.StatusCode);
-    }
-
     public sealed record MenuResponse(IReadOnlyList<SizeResponse> Sizes, IReadOnlyList<ToppingResponse> Toppings, decimal TaxRate);
     public sealed record SizeResponse(string Name, decimal Price);
     public sealed record ToppingResponse(string Id, decimal Rate);
     public sealed record PreviewResponse(bool IsValid, PreviewBreakdown? Breakdown, IReadOnlyList<string> Errors);
     public sealed record PreviewBreakdown(decimal Subtotal, decimal Discount, decimal Tax, decimal Total);
-    public sealed record OrderResponse(string Id, string CustomerName, decimal Total, string Status);
 }

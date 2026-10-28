@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type FormEvent } from 'react';
-import { ApiError, cancelOrder, getMenu, placeOrder, updateOrder, type PizzaMenu, type PizzaOrder, type PizzaOrderRequest } from './api/pizza';
+import { ApiError, cancelOrder, getMenu, placeOrder, type PizzaMenu, type PizzaOrderRequest } from './api/pizza';
 import { CartLines } from './components/CartLines';
 import { OrderDetailsDialog } from './components/OrderDetailsDialog';
 import { PizzaBuilder } from './components/PizzaBuilder';
@@ -18,10 +18,8 @@ export default function App({ previewDebounceMs, statusPollMs }: { previewDeboun
   const [customerName, setCustomerName] = useState('');
   const tracking = useOrderTracking(statusPollMs);
   const [cancelling, setCancelling] = useState(false);
-  /** A message about the last change or cancel attempt, shown with the placed order. */
+  /** A message about the last cancel attempt, shown with the placed order. */
   const [cancelNote, setCancelNote] = useState('');
-  /** Set while the customer is changing a placed order. Saving sends this version, so a delayed or repeated save cannot overwrite newer changes (UI-018). */
-  const [editing, setEditing] = useState<{ id: string; version: number } | null>(null);
   /** One key per checkout attempt. Kept across retries of the same order, dropped when the order changes or is accepted (UI-015). */
   const submissionKey = useRef<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -35,18 +33,6 @@ export default function App({ previewDebounceMs, statusPollMs }: { previewDeboun
     });
     return () => controller.abort();
   }, []);
-
-  // If the restaurant starts (or the customer cancels elsewhere) while the order is being edited, it can no longer be changed.
-  useEffect(() => {
-    const current = tracking.order;
-    if (editing && current && current.id === editing.id && !current.canCustomerChange) {
-      setEditing(null);
-      dispatchCart({ type: 'reset' });
-      setCustomerName('');
-      setSubmitError('');
-      setCancelNote('The restaurant has started this order while you were changing it, so it can no longer be changed.');
-    }
-  }, [tracking.order, editing]);
 
   // Any change to the draft is a different request, so it needs a new idempotency key and clears the last error.
   const dispatch = useCallback((action: CartAction) => {
@@ -72,36 +58,13 @@ export default function App({ previewDebounceMs, statusPollMs }: { previewDeboun
     tip: toTipRequest(state.tip),
   });
 
-  function loadIntoBuilder(order: PizzaOrder) {
-    dispatchCart({ type: 'load', items: order.items, promoCode: order.promoCode, tip: order.tip });
-    setCustomerName(order.customerName);
-    setEditing({ id: order.id, version: order.version });
-  }
-
-  function startEditing() {
-    const current = tracking.order;
-    if (!current || !current.canCustomerChange) return;
-    submissionKey.current = null;
-    setSubmitError('');
-    setCancelNote('');
-    loadIntoBuilder(current);
-  }
-
-  function stopEditing() {
-    setEditing(null);
-    dispatchCart({ type: 'reset' });
-    setCustomerName('');
-    setSubmitError('');
-  }
-
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit) return;
     setSubmitting(true);
     setSubmitError('');
     try {
-      if (editing) await saveChanges(editing);
-      else await sendNewOrder();
+      await sendNewOrder();
     } finally {
       setSubmitting(false);
     }
@@ -125,34 +88,6 @@ export default function App({ previewDebounceMs, statusPollMs }: { previewDeboun
       } else {
         // A timeout, a dropped connection or a server error: the order may exist. Keep the key so pressing the button again is safe (UI-011, UI-015).
         setSubmitError('We couldn’t confirm your order, so it may or may not have been received. Press “Place my order” again. We’ll use the same order reference, so you won’t get a duplicate.');
-      }
-    }
-  }
-
-  async function saveChanges(target: { id: string; version: number }) {
-    try {
-      const updated = await updateOrder(target.id, requestBody(), target.version);
-      tracking.accept(updated);
-      setEditing(null);
-      dispatchCart({ type: 'reset' });
-      setCustomerName('');
-      setCancelNote('');
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 409 && error.order) {
-        // The restaurant started first. Show the service's reason and the order as it now is (UI-018).
-        tracking.accept(error.order);
-        stopEditing();
-        setCancelNote(error.message);
-      } else if (error instanceof ApiError && error.status === 412 && error.order) {
-        // The order changed since this version was loaded (for example on another phone). Load the latest so nothing is overwritten.
-        tracking.accept(error.order);
-        loadIntoBuilder(error.order);
-        setSubmitError('This order changed since you opened it. We loaded the latest version. Review it and save again.');
-      } else if (error instanceof ApiError && error.status !== undefined && error.status < 500) {
-        setSubmitError(error.message);
-      } else {
-        // Unknown outcome. Saving again is safe: the same update sent twice changes the order once (UI-018, ORD-006).
-        setSubmitError('We couldn’t confirm your change, so it may or may not have been saved. Press “Save changes” again. It is safe to repeat.');
       }
     }
   }
@@ -191,8 +126,7 @@ export default function App({ previewDebounceMs, statusPollMs }: { previewDeboun
           : <p className="notice" role="status">Loading the menu…</p>}
       </div>
       <aside className="order-card" aria-label="Your order">
-        <div className="order-card-header"><div><h2>{editing ? 'Change your order' : 'Your order'}</h2></div></div>
-        {editing && <p className="editing-banner" role="status">You are changing order #{editing.id.slice(0, 8).toUpperCase()}. <button type="button" className="link-button" onClick={stopEditing}>Stop editing</button></p>}
+        <div className="order-card-header"><div><h2>Your order</h2></div></div>
         {menu && hasLines && <CartLines menu={menu} lines={state.lines} selectedId={state.selectedId} breakdown={breakdown} dispatch={dispatch} />}
         {menu && <PromoAndTip state={state} dispatch={dispatch} promotion={promotion} />}
         <PriceBreakdown hasLines={hasLines} breakdown={breakdown} isCurrent={preview.isCurrent} pending={preview.pending}
@@ -203,11 +137,11 @@ export default function App({ previewDebounceMs, statusPollMs }: { previewDeboun
         <input id="customerName" className="name-input" value={customerName} maxLength={80} placeholder="e.g. Long"
           onChange={event => { setCustomerName(event.target.value); submissionKey.current = null; setSubmitError(''); }} />
         <button className="place-order" type="submit" disabled={!canSubmit}>
-          {editing ? (submitting ? 'Saving…' : 'Save changes') : (submitting ? 'Placing order…' : 'Place my order')} <span aria-hidden="true">→</span>
+          {submitting ? 'Placing order…' : 'Place my order'} <span aria-hidden="true">→</span>
         </button>
         {submitError && <p className="error" role="alert">{submitError}</p>}
         {tracking.order && <OrderStatusPanel order={tracking.order} refreshFailed={tracking.refreshFailed} cancelling={cancelling}
-          note={cancelNote} onChange={startEditing} onCancel={cancel} onDismiss={() => { tracking.clear(); setCancelNote(''); }} />}
+          note={cancelNote} onCancel={cancel} onDismiss={() => { tracking.clear(); setCancelNote(''); }} />}
       </aside>
     </form>
     {detailsOpen && menu && breakdown && <OrderDetailsDialog menu={menu} breakdown={breakdown} onClose={closeDetails} />}

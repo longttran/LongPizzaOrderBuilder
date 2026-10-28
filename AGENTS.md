@@ -45,6 +45,9 @@ Use `npm ci` (lockfile) rather than `npm install`. Pin new dependencies to exact
 - Editor settings are in `.editorconfig` (4 spaces C#, 2 spaces TS/JSON/YAML). Keep final newlines.
 - Frontend: small components, state transitions in the pure reducer in `domain/cart.ts`, no price fields in state.
 - Test fixtures (`src/test/fixtures.ts`) use deliberately unrealistic prices so a UI that computes its own would fail.
+- The test projects reference both back ends, so every entry-point type needs a distinct name. The builder API's is `Program`; the order service's is `OrderServiceProgram` (two types called `Program` in two referenced assemblies is compile error CS0433). Do not use top-level statements in a new back end.
+- Tests must satisfy the xunit analyzers: use `Assert.Empty` / `Assert.Single` rather than `Assert.Equal(0|1, x.Count)`, `Assert.Contains` rather than `Assert.True(x.Contains(...))`, and `async`/`await` rather than `Wait`, `WaitAll` or `.Result`.
+- Verify the tests as separate assemblies. A check that compiles everything into one assembly hides type-name collisions.
 - Accessibility is a requirement: keyboard operation, labelled controls, visible focus, no information by colour alone.
 
 ## Do not

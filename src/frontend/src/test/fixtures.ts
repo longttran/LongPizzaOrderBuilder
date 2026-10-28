@@ -69,17 +69,16 @@ const PATHS: Record<OrderStatus, OrderStatus[]> = {
 
 const DEFAULT_ITEMS: PizzaOrderItemRequest[] = [{ size: 'Medium', crust: 'Classic', toppings: ['pepperoni'], quantity: 1 }];
 
-/** An order as the order service would return it in the given status, with a consistent history and version. */
-export function orderWith(status: OrderStatus, options: { id?: string; name?: string; total?: number; items?: PizzaOrderItemRequest[]; updates?: number } = {}): PizzaOrder {
+/** An order as the order service would return it in the given status, with a consistent history. */
+export function orderWith(status: OrderStatus, options: { id?: string; name?: string; total?: number; items?: PizzaOrderItemRequest[] } = {}): PizzaOrder {
   const base = Date.parse('2026-10-29T12:00:00Z');
   const events: OrderEvent[] = [{ event: 'Placed', status: 'NotStarted', at: new Date(base).toISOString(), actor: 'Customer' }];
-  for (let i = 0; i < (options.updates ?? 0); i++) events.push({ event: 'Updated', status: 'NotStarted', at: new Date(base + (i + 1) * 30_000).toISOString(), actor: 'Customer' });
   PATHS[status].forEach(to => events.push({ event: to, status: to, at: new Date(base + (events.length + 1) * 60_000).toISOString(), actor: to === 'Cancelled' ? 'Customer' : 'Restaurant' }));
   const items = options.items ?? DEFAULT_ITEMS;
   return {
-    id: options.id ?? 'abcdef0123456789', customerName: options.name ?? 'Sam', items, promoCode: null, tip: null,
-    status, total: options.total ?? 8.8, version: events.length, createdAt: events[0].at, updatedAt: events[events.length - 1].at, history: events,
-    canCustomerChange: status === 'NotStarted',
+    id: options.id ?? 'abcdef0123456789', customerName: options.name ?? 'Sam', items,
+    status, total: options.total ?? 8.8, createdAt: events[0].at, updatedAt: events[events.length - 1].at, history: events,
+    canCustomerCancel: status === 'NotStarted',
     pricing: fakeServerPricing({ items, promoCode: null, tip: { type: 'None' } }).breakdown!,
   };
 }

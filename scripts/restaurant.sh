@@ -15,7 +15,7 @@ set -euo pipefail
 BASE="${ORDER_SERVICE_URL:-http://localhost:8090}/api/restaurant/orders"
 move() { curl -s -w '\n[HTTP %{http_code}]\n' -H 'Content-Type: application/json' -d "{\"to\":\"$2\"}" "$BASE/$1/transitions"; }
 case "${1:-}" in
-  list)    curl -s "$BASE${2:+?status=$2}" | grep -o '"id":"[a-f0-9]*","customerName":"[^"]*"\|"status":"[A-Za-z]*","version":[0-9]*' | paste -d' ' - - | sed 's/"id":"\([a-f0-9]*\)","customerName":"\([^"]*\)" "status":"\([A-Za-z]*\)","version":\([0-9]*\)/\1  \3 (v\4)  \2/' ;;
+  list)    curl -s "$BASE${2:+?status=$2}" | grep -o '"id":"[a-f0-9]*","customerName":"[^"]*"\|"status":"[A-Za-z]*","createdAt"' | paste -d' ' - - | sed 's/"id":"\([a-f0-9]*\)","customerName":"\([^"]*\)" "status":"\([A-Za-z]*\)","createdAt"/\1  \3  \2/' ;;
   start)   move "${2:?order id}" Started ;;
   ready)   move "${2:?order id}" ReadyForPickup ;;
   deliver) move "${2:?order id}" Delivered ;;

@@ -106,26 +106,3 @@ describe('UI-002: a price is matched to a line by configuration, never by positi
     expect(findPricedLine(changed.lines[0], breakdown)).toBeUndefined();
   });
 });
-
-describe('UI-018: an existing order can be loaded into the builder to be changed', () => {
-  it('replaces the draft with the order’s items, promo and tip, as separate copies', () => {
-    const items = [{ size: 'Large' as const, crust: 'Thin', toppings: ['bacon'], quantity: 2 }, { size: 'Small' as const, crust: 'Classic', toppings: [], quantity: 1 }];
-    const state = cartReducer(createInitialState(), { type: 'load', items, promoCode: 'SAVE5', tip: { type: 'Percent', percent: 18 } });
-
-    expect(state.lines.map(line => [line.size, line.crust, line.toppings, line.quantity])).toEqual([['Large', 'Thin', ['bacon'], 2], ['Small', 'Classic', [], 1]]);
-    expect(state.selectedId).toBe(state.lines[0].id);
-    expect(state.promoCode).toBe('SAVE5');
-    expect(state.tip).toEqual({ mode: 'Percent', percent: 18, customText: '' });
-    expect(new Set(state.lines.map(line => line.id)).size).toBe(2);
-
-    const edited = cartReducer(state, { type: 'toggleTopping', toppingId: 'pepperoni' });
-    expect(items[0].toppings).toEqual(['bacon']);                       // editing the draft never changes the order object
-    expect(toPricingRequest(edited).tip).toEqual({ type: 'Percent', percent: 18 });
-  });
-
-  it('restores a custom tip and no tip', () => {
-    const items = [{ size: 'Small' as const, crust: 'Classic', toppings: [], quantity: 1 }];
-    expect(cartReducer(createInitialState(), { type: 'load', items, promoCode: null, tip: { type: 'Custom', amount: 3.5 } }).tip).toEqual({ mode: 'Custom', percent: 15, customText: '3.5' });
-    expect(cartReducer(createInitialState(), { type: 'load', items, promoCode: null, tip: null }).tip.mode).toBe('None');
-  });
-});

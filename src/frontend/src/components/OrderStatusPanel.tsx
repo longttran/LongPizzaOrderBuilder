@@ -3,7 +3,7 @@ import { money } from '../format';
 import { isFinalStatus } from '../hooks/useOrderTracking';
 
 const text: Record<OrderStatus, { icon: string; label: string; detail: string }> = {
-  NotStarted: { icon: '●', label: 'Not Started', detail: 'The restaurant hasn’t started yet. You can still change or cancel it.' },
+  NotStarted: { icon: '●', label: 'Not Started', detail: 'The restaurant hasn’t started yet. You can still cancel it.' },
   Started: { icon: '◐', label: 'Started', detail: 'The restaurant is making your order.' },
   ReadyForPickup: { icon: '◕', label: 'Ready for Pickup', detail: 'Your order is ready.' },
   Delivered: { icon: '✓', label: 'Delivered', detail: 'Your order was delivered.' },
@@ -19,7 +19,6 @@ type Props = {
   cancelling: boolean;
   /** A message about the last change or cancel attempt (for example "the restaurant has already started"). */
   note: string;
-  onChange: () => void;
   onCancel: () => void;
   onDismiss: () => void;
 };
@@ -30,7 +29,7 @@ const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: 'nume
  * Shows an order's status exactly as the order service last reported it. The status is always written out in words, with a symbol,
  * never by colour alone. The Change and Cancel buttons appear only when the service says the customer can still change the order.
  */
-export function OrderStatusPanel({ order, refreshFailed, cancelling, note, onChange, onCancel, onDismiss }: Props) {
+export function OrderStatusPanel({ order, refreshFailed, cancelling, note, onCancel, onDismiss }: Props) {
   const shown = text[order.status];
   return <section className="order-status" aria-label="Your placed order">
     <div className="order-status-head">
@@ -41,10 +40,9 @@ export function OrderStatusPanel({ order, refreshFailed, cancelling, note, onCha
       <span aria-hidden="true">{shown.icon}</span> <strong>{shown.label}</strong>. {shown.detail}
     </p>
     <p className="notice">Thanks, {order.customerName}. Total: {money(order.total)}</p>
-    {order.canCustomerChange && <div className="order-actions">
-      <button type="button" className="change-order" disabled={cancelling} onClick={onChange}>Change this order</button>
-      <button type="button" className="cancel-order" disabled={cancelling} onClick={onCancel}>{cancelling ? 'Cancelling…' : 'Cancel this order'}</button>
-    </div>}
+    {order.canCustomerCancel && <button type="button" className="cancel-order" disabled={cancelling} onClick={onCancel}>
+      {cancelling ? 'Cancelling…' : 'Cancel this order'}
+    </button>}
     {note && <p className="error" role="alert">{note}</p>}
     {refreshFailed && <p className="notice" role="status">We couldn’t refresh the status just now. This is the last update we have, from {time(order.updatedAt)}.</p>}
     <details>

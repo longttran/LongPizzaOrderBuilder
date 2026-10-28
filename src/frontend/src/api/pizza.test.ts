@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, cancelOrder, getMenu, getOrder, placeOrder, previewPricing, updateOrder } from './pizza';
+import { ApiError, cancelOrder, getMenu, getOrder, placeOrder, previewPricing } from './pizza';
 import { fakeServerPricing, orderWith } from '../test/fixtures';
 
 const item = { size: 'Medium' as const, crust: 'Classic', toppings: [], quantity: 1 };
@@ -69,7 +69,7 @@ describe('UI-015: an order request carries its idempotency key and times out int
 describe('UI-016: cancelling and looking up an order report what the server says', () => {
   it('returns the cancelled order', async () => {
     reply(200, orderWith('Cancelled'));
-    await expect(cancelOrder('abc')).resolves.toMatchObject({ status: 'Cancelled', canCustomerChange: false });
+    await expect(cancelOrder('abc')).resolves.toMatchObject({ status: 'Cancelled', canCustomerCancel: false });
   });
 
   it('on 409 throws an ApiError that carries the order as it now is', async () => {
@@ -82,26 +82,6 @@ describe('UI-016: cancelling and looking up an order report what the server says
     await expect(getOrder('abc')).resolves.toMatchObject({ status: 'Started' });
     reply(404, {});
     await expect(getOrder('nope')).rejects.toMatchObject({ status: 404 });
-  });
-});
-
-describe('UI-018: updating an order names the version it is based on', () => {
-  it('sends If-Match with the version and only choices in the body', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(orderWith('NotStarted', { updates: 1 })), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-    await updateOrder('abc', { customerName: 'Sam', items: [item] }, 3);
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toMatch(/\/api\/orders\/abc$/);
-    expect(init.method).toBe('PUT');
-    expect((init.headers as Record<string, string>)['If-Match']).toBe('"3"');
-    expect(String(init.body)).not.toMatch(/total|price|tax/i);
-  });
-
-  it('throws an ApiError carrying the order for 409 (restaurant started) and 412 (order changed since)', async () => {
-    reply(409, { errors: ['The restaurant has already started this order, so it can no longer be changed.'], order: orderWith('Started') });
-    await expect(updateOrder('abc', { customerName: 'Sam', items: [item] }, 1)).rejects.toMatchObject({ status: 409, order: { status: 'Started' } });
-    reply(412, { errors: ['This order has changed since you loaded it.'], order: orderWith('NotStarted', { updates: 1 }) });
-    await expect(updateOrder('abc', { customerName: 'Sam', items: [item] }, 1)).rejects.toMatchObject({ status: 412, order: { version: 2 } });
   });
 });
 

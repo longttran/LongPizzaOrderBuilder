@@ -47,6 +47,9 @@ internal sealed class PausingClock : TimeProvider
 internal static class DedicatedThread
 {
     public static Task<T> Run<T>(Func<T> work) => Task.Factory.StartNew(work, TaskCreationOptions.LongRunning);
+
+    /// <summary>True if the task finishes within <paramref name="time"/>. Awaits instead of blocking, so tests stay properly asynchronous.</summary>
+    public static async Task<bool> FinishesWithin(Task task, TimeSpan time) => await Task.WhenAny(task, Task.Delay(time)) == task;
 }
 
 /// <summary>A clock that moves forward one second every time it is read, so times are distinct and predictable.</summary>

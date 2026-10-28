@@ -22,22 +22,21 @@ public sealed class OrderIdempotencyTests
         Assert.False(first.Replayed);
         Assert.True(retry.Replayed);
         Assert.Equal(first.Order.Id, retry.Order.Id);
-        Assert.Equal(1, store.All().Count);
+        Assert.Single(store.All());
     }
 
     [Fact, Trait("Invariant", "ORD-004")]
-    public void A_retry_after_the_order_has_moved_on_reports_its_current_status_and_content()
+    public void A_retry_after_the_order_has_moved_on_reports_its_current_status()
     {
         var store = NewStore();
         var first = store.Create(Request(quantity: 1), "key-2");
-        store.Update(first.Order.Id, Request(quantity: 3), 1);
         store.Transition(first.Order.Id, OrderStatus.Started, OrderActor.Restaurant);
 
         var retry = store.Create(Request(quantity: 1), "key-2");   // the customer's original request, retried much later
         Assert.True(retry.Replayed);
+        Assert.Equal(first.Order.Id, retry.Order.Id);
         Assert.Equal(OrderStatus.Started, retry.Order.Status);     // the truth, not the status at creation
-        Assert.Equal(3, retry.Order.Items[0].Quantity);            // and not re-created from the old request
-        Assert.Equal(1, store.All().Count);
+        Assert.Single(store.All());
     }
 
     [Fact, Trait("Invariant", "ORD-004")]
@@ -49,7 +48,7 @@ public sealed class OrderIdempotencyTests
         Assert.Throws<IdempotencyConflictException>(() => store.Create(Request(quantity: 2), "key-3"));
         Assert.Throws<IdempotencyConflictException>(() => store.Create(Request(name: "Someone else"), "key-3"));
         Assert.Throws<IdempotencyConflictException>(() => store.Create(Request(tip: new TipRequest("Percent", 15m)), "key-3"));
-        Assert.Equal(1, store.All().Count);
+        Assert.Single(store.All());
     }
 
     [Fact, Trait("Invariant", "ORD-004")]
@@ -74,11 +73,11 @@ public sealed class OrderIdempotencyTests
     {
         var store = NewStore();
         Assert.Throws<PricingValidationException>(() => store.Create(Request(quantity: 0), "key-5"));
-        Assert.Equal(0, store.All().Count);
+        Assert.Empty(store.All());
 
         var corrected = store.Create(Request(quantity: 1), "key-5");   // the customer corrected it and tried again
         Assert.False(corrected.Replayed);
-        Assert.Equal(1, store.All().Count);
+        Assert.Single(store.All());
     }
 
     [Fact, Trait("Invariant", "ORD-001")]
@@ -88,11 +87,11 @@ public sealed class OrderIdempotencyTests
         Assert.Throws<PricingValidationException>(() => store.Create(new OrderRequest("Sam", [null!], null, null), "key-6"));
         Assert.Throws<PricingValidationException>(() => store.Create(new OrderRequest("Sam", [new("Small", "Classic", null!, 1)], null, new TipRequest(null!)), "key-7"));
         Assert.Throws<PricingValidationException>(() => store.Create(new OrderRequest("Sam", [], null, null), "key-8"));
-        Assert.Equal(0, store.All().Count);
+        Assert.Empty(store.All());
     }
 
     [Fact, Trait("Invariant", "ORD-004")]
-    public void A_retry_that_arrives_while_the_first_attempt_is_still_being_saved_waits_and_then_gets_the_same_order()
+    public async Task A_retry_that_arrives_while_the_first_attempt_is_still_being_saved_waits_and_then_gets_the_same_order()
     {
         // The first attempt has checked the key (new) and priced the order but has not saved it yet. Freeze it there and send the retry.
         // A correct store makes the retry wait, then it finds the saved order. Without that, both would create an order.
@@ -103,19 +102,20 @@ public sealed class OrderIdempotencyTests
         var first = DedicatedThread.Run(() => store.Create(Request(), "key-slow"));
         Assert.True(clock.Paused.Wait(TimeSpan.FromSeconds(5)), "The first attempt never reached the pause point.");
         var retry = DedicatedThread.Run(() => store.Create(Request(), "key-slow"));
-        var retryGotInEarly = retry.Wait(TimeSpan.FromMilliseconds(300));
+        var retryGotInEarly = await DedicatedThread.FinishesWithin(retry, TimeSpan.FromMilliseconds(300));
         clock.Resume.Set();
-        Task.WaitAll(first, retry);
+        var firstResult = await first;
+        var retryResult = await retry;
 
         Assert.False(retryGotInEarly, "The retry was allowed in while the first attempt was half done.");
-        Assert.False(first.Result.Replayed);
-        Assert.True(retry.Result.Replayed);
-        Assert.Equal(first.Result.Order.Id, retry.Result.Order.Id);
-        Assert.Equal(1, store.All().Count);
+        Assert.False(firstResult.Replayed);
+        Assert.True(retryResult.Replayed);
+        Assert.Equal(firstResult.Order.Id, retryResult.Order.Id);
+        Assert.Single(store.All());
     }
 
     [Fact, Trait("Invariant", "ORD-004")]
-    public void Many_simultaneous_duplicate_submissions_create_exactly_one_order()
+    public async Task Many_simultaneous_duplicate_submissions_create_exactly_one_order()
     {
         var store = NewStore();
         const int attempts = 64;
@@ -123,10 +123,10 @@ public sealed class OrderIdempotencyTests
         var results = Enumerable.Range(0, attempts)
             .Select(_ => Task.Factory.StartNew(() => { gate.SignalAndWait(); return store.Create(Request(), "key-race"); }, TaskCreationOptions.LongRunning))
             .ToArray();
-        Task.WaitAll(results);
+        var created = await Task.WhenAll(results);
 
-        Assert.Equal(1, results.Select(r => r.Result.Order.Id).Distinct().Count());
-        Assert.Equal(1, results.Count(r => !r.Result.Replayed));       // exactly one created it
-        Assert.Equal(1, store.All().Count);
+        Assert.Single(created.Select(r => r.Order.Id).Distinct());
+        Assert.Single(created.Where(r => !r.Replayed));                // exactly one created it
+        Assert.Single(store.All());
     }
 }

@@ -22,7 +22,7 @@ export type OrderTracking = {
 /**
  * Keeps the status of a placed order in step with the server.
  * - Polls until the order is Delivered or Cancelled.
- * - A snapshot with a lower version than the one we hold is older, so it can never move the order backwards (UI-017).
+ * - A snapshot with a shorter history than the one we hold is older, so it can never move the order backwards (UI-017).
  * - If a refresh fails, the last known status stays on screen and `refreshFailed` is set; it is never guessed (UI-017).
  */
 export function useOrderTracking(pollMs: number = STATUS_POLL_MS): OrderTracking {
@@ -32,7 +32,7 @@ export function useOrderTracking(pollMs: number = STATUS_POLL_MS): OrderTracking
   const track = useCallback((next: PizzaOrder) => { setOrder(next); setRefreshFailed(false); }, []);
   const clear = useCallback(() => { setOrder(null); setRefreshFailed(false); }, []);
   const accept = useCallback((next: PizzaOrder) => {
-    setOrder(current => (current && current.id === next.id && next.version < current.version ? current : next));
+    setOrder(current => (current && current.id === next.id && next.history.length < current.history.length ? current : next));
   }, []);
 
   const refresh = useCallback(async (id: string) => {

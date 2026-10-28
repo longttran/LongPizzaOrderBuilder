@@ -53,7 +53,7 @@ Questions that are not answered by the prototype: how the new total is confirmed
 - **Service:** `PUT /api/orders/{id}` with `If-Match: "<version>"`; an `OrderStore.Update` that checks status, version and content under the same lock as cancel and start; an `ETag` header; a `version` counter; an "Updated" history event.
 - **Page:** a "Change this order" button, an edit mode that loads the order into the builder, a "Save changes" button, version-aware error handling (409 restaurant started, 412 changed elsewhere, unknown outcome with a safe retry).
 - **Tests:** 16 backend tests (rules, repeats, stale updates, the update-versus-start race frozen mid-change, required headers) and 11 frontend tests. Removing the lock from `Update` failed the race tests.
-- **Where it is:** a patch, `future-change-orders.patch`, handed over with this change, applies on top of it. It is **not in the repository**; if it is lost, this page and the invariants below are enough to rebuild it.
+- **Where it is:** a patch, `future-change-orders.patch`, handed over with this change, applies on top of it. It is **not in the repository**; if it is lost, this page and the invariants below are enough to rebuild it. The patch covers code, tests and scripts only, not documents: after applying it, `node scripts/check-invariants.mjs` will fail until ORD-005, ORD-006 and UI-018 (drafted below) are put back in `docs/INVARIANTS.md`. That is the registry doing its job, not a defect in the patch.
 
 ### Invariants to add if it is built (drafted, not in the registry)
 
