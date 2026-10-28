@@ -126,7 +126,7 @@ public sealed class OrderIdempotencyTests
         var created = await Task.WhenAll(results);
 
         Assert.Single(created.Select(r => r.Order.Id).Distinct());
-        Assert.Single(created.Where(r => !r.Replayed));                // exactly one created it
+        Assert.Single(created, r => !r.Replayed);                      // exactly one created it
         Assert.Single(store.All());
     }
 }

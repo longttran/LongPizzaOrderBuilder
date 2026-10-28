@@ -1,6 +1,5 @@
 /* Styles for the multi-pizza cart, accessible controls and the order-details dialog.
    Reuses the palette from style.css (#e45d37 accent, #eee6d8 borders). */
-.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 :where(button,input,select,a):focus-visible{outline:3px solid #e45d37;outline-offset:2px}
 
 .cart-lines{list-style:none;margin:0;padding:0}

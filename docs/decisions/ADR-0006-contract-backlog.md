@@ -17,6 +17,4 @@ These were found during review. They change the API contract, so they were left 
 
 ## Dropped from scope
 - **Order events, a transactional outbox and a RabbitMQ worker (formerly EVT-001).** They exist to feed a kitchen or delivery system, which this
-  project does not build. The order lifecycle is kept as in-process state with a recorded history (LIFE-001, LIFE-002). The `worker`, RabbitMQ and
-  PostgreSQL services already in Compose are pre-existing scaffolding. Removing them from the default stack is recommended but was not done here,
-  because it changes your working Docker setup.
+  project does not build. The order lifecycle is kept as in-process state with a recorded history (LIFE-001, LIFE-002). RabbitMQ and PostgreSQL have since been removed from Compose (nothing used them); the placeholder `worker` was removed too (ADR-0010).

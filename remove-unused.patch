@@ -1,0 +1,386 @@
+From 74f09ba9d255982cad11e495e203f5d01ee677b6 Mon Sep 17 00:00:00 2001
+From: fix <fix@local>
+Date: Wed, 28 Oct 2026 21:10:02 +0000
+Subject: [PATCH] Remove the unused worker and dead CSS; add a usage audit
+
+---
+ .github/workflows/ci.yml                      |  2 -
+ AGENTS.md                                     |  2 +-
+ LongPizzaOrderBuilder.slnx                    |  1 -
+ README.md                                     |  4 +-
+ compose.selfhost.yaml                         |  7 ----
+ compose.yaml                                  |  6 ---
+ deploy/docker/worker.Dockerfile               | 11 ------
+ docs/DESIGN.md                                | 13 +++----
+ docs/FUTURE-WORK.md                           | 15 ++++----
+ docs/HISTORY.md                               |  3 +-
+ docs/OPERATIONS.md                            |  8 ++--
+ docs/USAGE-AUDIT.md                           | 38 +++++++++++++++++++
+ docs/decisions/ADR-0006-contract-backlog.md   |  2 +-
+ .../ADR-0010-decisions-outside-the-scope.md   |  4 +-
+ .../LongPizzaOrderBuilder.Worker.csproj       | 10 -----
+ .../LongPizzaOrderBuilder.Worker/Program.cs   | 16 --------
+ src/frontend/src/components.css               |  1 -
+ src/frontend/src/style.css                    |  2 +-
+ 18 files changed, 64 insertions(+), 81 deletions(-)
+ delete mode 100644 deploy/docker/worker.Dockerfile
+ create mode 100644 docs/USAGE-AUDIT.md
+ delete mode 100644 src/backend/LongPizzaOrderBuilder.Worker/LongPizzaOrderBuilder.Worker.csproj
+ delete mode 100644 src/backend/LongPizzaOrderBuilder.Worker/Program.cs
+
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 08ce10c..0cd0891 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -64,8 +64,6 @@ jobs:
+         run: docker build -f deploy/docker/api.Dockerfile -t longpizzaorderbuilder-api:${{ github.sha }} .
+       - name: Build order service image
+         run: docker build -f deploy/docker/orderservice.Dockerfile -t longpizzaorderbuilder-orderservice:${{ github.sha }} .
+-      - name: Build worker image
+-        run: docker build -f deploy/docker/worker.Dockerfile -t longpizzaorderbuilder-worker:${{ github.sha }} .
+       - name: Build production frontend image
+         run: docker build -f deploy/docker/frontend.Dockerfile -t longpizzaorderbuilder-frontend:${{ github.sha }} .
+       - name: Run self-hosted Compose smoke test
+diff --git a/AGENTS.md b/AGENTS.md
+index c33bb56..f0fe950 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -5,7 +5,7 @@ Guidance for AI coding agents and new contributors. `CLAUDE.md` imports this fil
+ ## What this is
+ LongPizzaOrderBuilder: customers build one or more pizzas, watch a running total, and send the order to a **separate order service** that holds the order and its lifecycle
+ (Not Started, Started, Ready for Pickup, Delivered, Cancelled). React + TypeScript page, two ASP.NET Core (.NET 10) back ends, and a shared pricing library. There is no database or message broker (RabbitMQ and PostgreSQL were removed from Compose because nothing used them); orders are held in the order service's
+-memory, and a `worker` placeholder only logs. Treat it as a prototype, not a production ordering system. Scope: one restaurant, anonymous customers, no auth, payments, kitchen integration, menu admin or multiple locations.
++memory. Treat it as a prototype, not a production ordering system. Scope: one restaurant, anonymous customers, no auth, payments, kitchen integration, menu admin or multiple locations.
+ 
+ ## Layout
+ - `src/backend/LongPizzaOrderBuilder.Pricing`: the menu data (`PizzaMenu`) and `PricingService`, the only place prices are calculated. Used by both back ends.
+diff --git a/LongPizzaOrderBuilder.slnx b/LongPizzaOrderBuilder.slnx
+index 0b80b99..16c94a5 100644
+--- a/LongPizzaOrderBuilder.slnx
++++ b/LongPizzaOrderBuilder.slnx
+@@ -4,7 +4,6 @@
+     <Project Path="src/backend/LongPizzaOrderBuilder.Pricing/LongPizzaOrderBuilder.Pricing.csproj" />
+     <Project Path="src/backend/LongPizzaOrderBuilder.Api/LongPizzaOrderBuilder.Api.csproj" />
+     <Project Path="src/backend/LongPizzaOrderBuilder.OrderService/LongPizzaOrderBuilder.OrderService.csproj" />
+-    <Project Path="src/backend/LongPizzaOrderBuilder.Worker/LongPizzaOrderBuilder.Worker.csproj" />
+   </Folder>
+   <Folder Name="/tests/">
+     <Project Path="tests/LongPizzaOrderBuilder.IntegrationTests/LongPizzaOrderBuilder.IntegrationTests.csproj" />
+diff --git a/README.md b/README.md
+index e0cea69..14047f9 100644
+--- a/README.md
++++ b/README.md
+@@ -43,7 +43,7 @@ cd src/frontend && npm ci && npm test         # frontend (also: npm run lint, np
+ node scripts/check-invariants.mjs             # every invariant marked "enforced" is named by a test
+ ```
+ 
+-`scripts/verify.sh` runs all of it. What has and has not been run: [`docs/DESIGN.md`](docs/DESIGN.md) section 7. The warnings `npm ci` prints are explained in [`docs/DEPENDENCY-NOTES.md`](docs/DEPENDENCY-NOTES.md).
++`scripts/verify.sh` (or `scripts/verify.ps1` in PowerShell) runs all of it. What has and has not been run: [`docs/DESIGN.md`](docs/DESIGN.md) section 7. The warnings `npm ci` prints are explained in [`docs/DEPENDENCY-NOTES.md`](docs/DEPENDENCY-NOTES.md).
+ 
+ ## The order service API (`http://localhost:8090`)
+ 
+@@ -137,5 +137,5 @@ the restaurant is a script, an endpoint and an optional timer, with no screen or
+ 
+ ---
+ 
+-More: [design notes and assumptions](docs/DESIGN.md) · [lifecycle](docs/LIFECYCLE.md) · [invariants](docs/INVARIANTS.md) · [decisions](docs/decisions/README.md) · [future work](docs/FUTURE-WORK.md) · [dependency notes](docs/DEPENDENCY-NOTES.md) ·
++More: [design notes and assumptions](docs/DESIGN.md) · [lifecycle](docs/LIFECYCLE.md) · [invariants](docs/INVARIANTS.md) · [decisions](docs/decisions/README.md) · [future work](docs/FUTURE-WORK.md) · [dependency notes](docs/DEPENDENCY-NOTES.md) · [usage audit](docs/USAGE-AUDIT.md) ·
+ [AI usage guide](docs/AI-USAGE-GUIDE.md) · [setup and deployment details](docs/OPERATIONS.md) · [original planning notes](docs/PLANNING.md) · [project history](docs/HISTORY.md) · [guidance for AI agents](AGENTS.md)
+diff --git a/compose.selfhost.yaml b/compose.selfhost.yaml
+index a1966d0..23939f3 100644
+--- a/compose.selfhost.yaml
++++ b/compose.selfhost.yaml
+@@ -53,10 +53,3 @@ services:
+       interval: 15s
+       timeout: 3s
+       retries: 5
+-
+-  # A placeholder that only logs. It has nothing to do yet (see docs/FUTURE-WORK.md); remove it or give it work.
+-  worker:
+-    build:
+-      context: .
+-      dockerfile: deploy/docker/worker.Dockerfile
+-    restart: unless-stopped
+diff --git a/compose.yaml b/compose.yaml
+index 536c924..1933715 100644
+--- a/compose.yaml
++++ b/compose.yaml
+@@ -51,11 +51,5 @@ services:
+       orderservice:
+         condition: service_healthy
+ 
+-  # A placeholder that only logs. It has nothing to do yet (see docs/FUTURE-WORK.md); remove it or give it work.
+-  worker:
+-    build:
+-      context: .
+-      dockerfile: deploy/docker/worker.Dockerfile
+-
+ volumes:
+   frontend_node_modules:
+diff --git a/deploy/docker/worker.Dockerfile b/deploy/docker/worker.Dockerfile
+deleted file mode 100644
+index 0d2dc86..0000000
+--- a/deploy/docker/worker.Dockerfile
++++ /dev/null
+@@ -1,11 +0,0 @@
+-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+-WORKDIR /src
+-COPY src/backend/LongPizzaOrderBuilder.Worker/LongPizzaOrderBuilder.Worker.csproj src/backend/LongPizzaOrderBuilder.Worker/
+-RUN dotnet restore src/backend/LongPizzaOrderBuilder.Worker/LongPizzaOrderBuilder.Worker.csproj
+-COPY src/backend/LongPizzaOrderBuilder.Worker/ src/backend/LongPizzaOrderBuilder.Worker/
+-RUN dotnet publish src/backend/LongPizzaOrderBuilder.Worker/LongPizzaOrderBuilder.Worker.csproj -c Release -o /app/publish /p:UseAppHost=false
+-
+-FROM mcr.microsoft.com/dotnet/runtime:10.0 AS final
+-WORKDIR /app
+-COPY --from=build /app/publish .
+-ENTRYPOINT ["dotnet", "LongPizzaOrderBuilder.Worker.dll"]
+diff --git a/docs/DESIGN.md b/docs/DESIGN.md
+index 52acbfe..31ec088 100644
+--- a/docs/DESIGN.md
++++ b/docs/DESIGN.md
+@@ -13,7 +13,7 @@ The system is one restaurant with anonymous customers. These constraints were ch
+ | No authentication | Met | No auth code anywhere in `src/` or `tests/`. The customer gives a name for the order and nothing else. |
+ | No customer accounts | Met | No user model, sessions or login UI. |
+ | No real payments | Met | The tip is a number added to the total. No payment provider, card fields or charge calls. |
+-| No kitchen or delivery integration | Met | No code sends orders to a kitchen. The restaurant side is simulated (an endpoint, `scripts/restaurant.sh`, an optional timer). RabbitMQ and PostgreSQL were removed from Compose because nothing used them; a `worker` placeholder remains (ADR-0010). |
++| No kitchen or delivery integration | Met | No code sends orders to a kitchen. The restaurant side is simulated (an endpoint, `scripts/restaurant.sh`, an optional timer). RabbitMQ, PostgreSQL and a placeholder `worker` were removed because nothing used them (ADR-0010). |
+ | No menu administration UI | Met | The menu is read-only data. |
+ | No multiple locations | Met | One menu, one tax rate, one store. |
+ | Prioritise correct pricing | Met | Section 4. |
+@@ -185,7 +185,7 @@ is deterministic and has no new dependency). All versions are pinned exactly.
+ are kept because they are short, the invariant check is automatic, and they carry the reasoning forward. If time is tight, keep the registry,
+ the pricing tests and ADR-0001, and drop the rest.
+ 
+-**Unused infrastructure removed:** RabbitMQ and PostgreSQL (with their settings, volumes and CI variables) were taken out of Compose because no code used them. The `worker` remains as a placeholder that only logs. A database and a message broker are future work (ADR-0010).
++**Unused infrastructure removed:** RabbitMQ, PostgreSQL and the placeholder `worker` (with their settings, volumes, Dockerfile and CI steps) were removed because no code used them. A database and a message broker are future work (ADR-0010).
+ 
+ **Commit history.** Suggested sequence: (1) menu injection and promotion rules as data, with backend tests; (2) pricing invariant tests;
+ (3) frontend tooling; (4) cart domain and pricing hook with tests; (5) components and UI; (6) invariant registry, ADRs, agent files, CI and
+@@ -200,8 +200,7 @@ The decisions behind most of these, and what each would change, are in [ADR-0010
+ 3. **The restaurant routes have no authentication,** and the restaurant has no screen: it is `scripts/restaurant.sh`, the endpoint, or the optional timer.
+ 4. **Menu drift between the builder and the service** if they are deployed from different builds. A menu version stamp would detect it.
+ 5. **Polling instead of push** for status (up to 5 seconds behind).
+-6. **The `worker` is a placeholder** that only logs. Remove it or give it work.
+-7. **Confirm Compose and CI are green** on the pull request.
+-8. **One error shape across every endpoint** (API-002, planned), and an **automated end-to-end test** of build, order, retry and cancel.
+-9. **Changing a placed order,** if the business case holds. See [FUTURE-WORK.md](FUTURE-WORK.md).
+-10. **Dependency upgrades** (Vite, Vitest, ESLint). See [DEPENDENCY-NOTES.md](DEPENDENCY-NOTES.md).
++6. **Confirm Compose and CI are green** on the pull request.
++7. **One error shape across every endpoint** (API-002, planned), and an **automated end-to-end test** of build, order, retry and cancel.
++8. **Changing a placed order,** if the business case holds. See [FUTURE-WORK.md](FUTURE-WORK.md).
++9. **Dependency upgrades** (Vite, Vitest, ESLint). See [DEPENDENCY-NOTES.md](DEPENDENCY-NOTES.md).
+diff --git a/docs/FUTURE-WORK.md b/docs/FUTURE-WORK.md
+index 2273de7..9c80fea 100644
+--- a/docs/FUTURE-WORK.md
++++ b/docs/FUTURE-WORK.md
+@@ -13,14 +13,13 @@ Nothing here is built. Each item was left out on purpose to stay in scope. The f
+ | 5 | **Menu version stamped on every price** | Lets the builder and the service detect that they were deployed from different builds | ADR-0010 |
+ | 6 | **Promo stacking and conflicts** | Today one code per order, so promos cannot conflict. Richer rules need priorities and `ConflictsWith` | README, section 2 |
+ | 7 | **One error shape across every endpoint** (API-002, the one planned invariant) | One way to read an error | [INVARIANTS.md](INVARIANTS.md) |
+-| 8 | **Message broker and events** | RabbitMQ was removed because nothing used it. Add one back only when something consumes from it, for example a kitchen integration (out of scope) | ADR-0010 |
+-| 9 | **The `worker`** | A placeholder that only logs. Remove it or give it work | ADR-0010 |
+-| 10 | **Dependency upgrades**: `vite` to 6.4.5 (safe, tested), `vitest` to 5, ESLint to 10 | Clears the 4 dev-tooling vulnerabilities and an unsupported ESLint | [DEPENDENCY-NOTES.md](DEPENDENCY-NOTES.md) |
+-| 11 | **Bind the dev Vite port to `127.0.0.1`** in `compose.yaml` | The dev server is currently published on all interfaces | DEPENDENCY-NOTES.md |
+-| 12 | **`restaurant.sh` accepts the short id** shown on the page | Today only the full 32-character id works; the short one gives `404` | README |
+-| 13 | **Automated end-to-end test**, and tests for real network faults | A dropped reply was simulated once by hand, not in a test | [DESIGN.md](DESIGN.md), section 10 |
+-| 14 | **Key expiry, rate limiting, structured logs and metrics** | Keys currently live for the life of the process | ADR-0010 |
+-| 15 | **Estimated time, notifications, restaurant-side cancel and out-of-stock** | A real kitchen needs them | ADR-0010 |
++| 8 | **Message broker and events** | RabbitMQ and the placeholder `worker` were removed because nothing used them. Add them back only when something consumes from a broker, for example a kitchen integration (out of scope) | ADR-0010 |
++| 9 | **Dependency upgrades**: `vite` to 6.4.5 (safe, tested), `vitest` to 5, ESLint to 10 | Clears the 4 dev-tooling vulnerabilities and an unsupported ESLint | [DEPENDENCY-NOTES.md](DEPENDENCY-NOTES.md) |
++| 10 | **Bind the dev Vite port to `127.0.0.1`** in `compose.yaml` | The dev server is currently published on all interfaces | DEPENDENCY-NOTES.md |
++| 11 | **`restaurant.sh` accepts the short id** shown on the page | Today only the full 32-character id works; the short one gives `404` | README |
++| 12 | **Automated end-to-end test**, and tests for real network faults | A dropped reply was simulated once by hand, not in a test | [DESIGN.md](DESIGN.md), section 10 |
++| 13 | **Key expiry, rate limiting, structured logs and metrics** | Keys currently live for the life of the process | ADR-0010 |
++| 14 | **Estimated time, notifications, restaurant-side cancel and out-of-stock** | A real kitchen needs them | ADR-0010 |
+ 
+ ## Changing a placed order (deferred)
+ 
+diff --git a/docs/HISTORY.md b/docs/HISTORY.md
+index 14a67da..4e42b2a 100644
+--- a/docs/HISTORY.md
++++ b/docs/HISTORY.md
+@@ -25,7 +25,8 @@
+ ## Revision history
+ 
+ ### 2026-10-28 — Infrastructure trimmed, rule confirmed, dependency and AI-usage notes
+-- **RabbitMQ and PostgreSQL removed** from `compose.yaml`, `compose.selfhost.yaml`, `.env.example` and the CI smoke test, with the settings, volumes and `depends_on` entries that went with them. No code used either. The `worker` stays as a placeholder (it only logs); its start-up message no longer mentions RabbitMQ. If you ran the old stack, use `docker compose up --build --remove-orphans` once.
++- **RabbitMQ and PostgreSQL removed** from `compose.yaml`, `compose.selfhost.yaml`, `.env.example` and the CI smoke test, with the settings, volumes and `depends_on` entries that went with them. No code used either. If you ran the old stack, use `docker compose up --build --remove-orphans` once.
++- **Usage audit:** the placeholder `worker` (project, Dockerfile, two compose services, a CI image build and its solution entry) and 26 unused CSS rules (25 prototype leftovers in `style.css`, one in `components.css`) were removed. Everything else was checked and is used; see `docs/USAGE-AUDIT.md`.
+ - **Confirmed:** a customer can cancel only while the order is Not Started. Recorded in `DESIGN.md`, `LIFECYCLE.md` and ADR-0007.
+ - **Deferred as out of scope for this session:** changing a placed order (`docs/FUTURE-WORK.md`, which now opens with a one-page backlog of every deferred item).
+ - **New:** `docs/DEPENDENCY-NOTES.md` (what `npm ci` reports: deprecations, 4 dev-tooling vulnerabilities with 0 in production, and the esbuild install-scripts warning) and `docs/AI-USAGE-GUIDE.md`.
+diff --git a/docs/OPERATIONS.md b/docs/OPERATIONS.md
+index c0d2022..4daa8bf 100644
+--- a/docs/OPERATIONS.md
++++ b/docs/OPERATIONS.md
+@@ -33,7 +33,7 @@ There is no database or message broker: RabbitMQ and PostgreSQL were removed fro
+ 
+ #### Verify the .NET SDK
+ 
+-The API, Worker, and test projects target **.NET 10**. Install the .NET 10 SDK from the [official .NET download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) if it is not already installed. On Windows, WinGet is also available:
++The API, order service, pricing library, and test projects target **.NET 10**. Install the .NET 10 SDK from the [official .NET download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) if it is not already installed. On Windows, WinGet is also available:
+ 
+ ```powershell
+ winget install Microsoft.DotNet.SDK.10
+@@ -50,7 +50,7 @@ The repository's `global.json` selects the .NET 10 SDK family. SDKs can be insta
+ 
+ #### Run backend tests
+ 
+-Run these commands from the repository root. The solution includes the API, Worker, and the separate unit and integration test projects:
++Run these commands from the repository root. The solution includes the API, order service, pricing library, and the separate unit and integration test projects:
+ 
+ ```powershell
+ dotnet restore .\LongPizzaOrderBuilder.slnx
+@@ -90,7 +90,7 @@ Suggested frontend tools: [Prettier](https://prettier.io/) for consistent format
+ 
+ ### Self-host with production-style containers
+ 
+-The `compose.selfhost.yaml` profile builds a static frontend image served by Nginx, an ASP.NET Core API image, an order service image, and a worker placeholder image. Nginx exposes the app on one host port and proxies `/api` to the API over the private Compose network. The restaurant routes are not published.
++The `compose.selfhost.yaml` profile builds a static frontend image served by Nginx, an ASP.NET Core API image, and an order service image. Nginx exposes the app on one host port and proxies `/api` to the API over the private Compose network. The restaurant routes are not published.
+ 
+ 1. Optional: copy `.env.example` to `.env` to change a setting. There are no passwords now. Keep `.env` out of source control.
+ 2. Start the stack:
+@@ -106,7 +106,7 @@ Self-hosting notes:
+ 
+ - Expose only the frontend/reverse-proxy port to the LAN or internet. Do not publish the order service's restaurant routes (`/api/restaurant`); they have no authentication.
+ - Put TLS in front of the app before exposing it to the internet; configure firewall rules, host patching, secret rotation, and tested backups.
+-- There is no database or message broker. Orders live in the order service's memory, so a restart loses them. The `worker` is a placeholder that only logs.
++- There is no database or message broker. Orders live in the order service's memory, so a restart loses them.
+ - The self-host profile is therefore suitable for verifying container wiring and a demo, not yet for handling real customer orders.
+ 
+ ### Cloud portability
+diff --git a/docs/USAGE-AUDIT.md b/docs/USAGE-AUDIT.md
+new file mode 100644
+index 0000000..0de3a93
+--- /dev/null
++++ b/docs/USAGE-AUDIT.md
+@@ -0,0 +1,38 @@
++# Usage audit: what is in the repository and whether it is used
++
++A check of everything tracked in the repository, done on 2026-10-28 against the pull request branch. "Used" means the app, its tests, CI, Compose or a documented command depends on it.
++Two things were removed (the placeholder `worker` and dead CSS); everything else was confirmed as used. Git history keeps the removed files if they are ever wanted again.
++
++| Area | How it was checked | Result |
++|---|---|---|
++| Projects in the solution | Project references, the `.slnx`, Compose and CI | `Pricing`, `Api`, `OrderService` and the two test projects are used. **`Worker` removed:** nothing depended on it, and it only logged a heartbeat |
++| Compose services | Which services the others depend on, and what each runs | `api`, `orderservice` and `frontend` are used. `postgres` and `rabbitmq` (removed earlier) and `worker` (removed now) were not |
++| Dockerfiles and Nginx | Whether Compose or CI uses each | `api`, `orderservice` and `frontend` Dockerfiles and `deploy/nginx/frontend.conf` are used. `worker.Dockerfile` removed |
++| NuGet packages | Each `PackageReference` against the code | All used, except the worker's `Microsoft.Extensions.Hosting`, removed with it. The Api project also pins `Microsoft.OpenApi` explicitly; that was **not** verified (no package restore was possible) and was kept |
++| npm packages | `depcheck` | It lists `jsdom`, `vite`, `eslint` and `@testing-library/dom` as unused. All four are needed: `jsdom` is the Vitest environment (`vite.config.ts`), `vite` and `eslint` run from the `package.json` scripts, and `@testing-library/dom` is a required peer of `@testing-library/react`. **None removed** |
++| C# production code | Every type and public member, looking for names referenced nowhere else | Nothing unused, apart from controllers and entry points that the framework finds itself |
++| TypeScript code | Every export and every file | Nothing unused (`test/setup.ts` is loaded by the Vitest config) |
++| CSS | Every class name against the page's markup | **26 unused rules removed:** 25 in `style.css` (leftovers from the original prototype's hero artwork and similar) and 1 in `components.css`. `style.css` shrank from 10,076 to 7,370 bytes. The page was screenshotted in 5 states at desktop and mobile widths before and after, and all 10 images are byte-for-byte identical |
++| Scripts | Whether the README, CI or another script uses each | All used. `verify.ps1` is the PowerShell twin of `verify.sh` |
++| Config and support files | Whether a tool or document uses each | All used (`.dockerignore` and `LICENSE` by Docker and GitHub directly, `CLAUDE.md` by Claude Code, `.vscode/settings.json` by the editor) |
++| Documents | Whether each is linked from the README or an index | All linked. `PLANNING.md` and `OPERATIONS.md` are archives that still contain passages from before the order service; they were kept on purpose and could be pruned later |
++| Empty folders | Tracked files in every directory | **None in the repository.** Git does not track empty folders at all, so any you see are local leftovers (see below) |
++
++## Empty folders on your machine
++
++Switching branches or applying a patch with Git removes folders it has emptied, so these are usually leftovers from build output that was cleaned or from an editor. They are not part of the repository and deleting them changes nothing in it. In PowerShell, from the repo folder:
++
++```powershell
++# 1. List empty folders (skips .git, node_modules, bin and obj)
++Get-ChildItem -Directory -Recurse -Force |
++  Where-Object { $_.FullName -notmatch '\\(\.git|node_modules|bin|obj)(\\|$)' -and -not (Get-ChildItem $_.FullName -Force) } |
++  Select-Object -ExpandProperty FullName
++
++# 2. See what Git is ignoring (build output, node_modules): a dry run, nothing is deleted
++git clean -ndX
++
++# 3. Delete the empty folders you listed in step 1 (review the list first), for example:
++#    Remove-Item "C:\path\to\empty\folder"
++```
++
++These PowerShell commands have not been run (PowerShell is not available where this was written), so check the list before deleting anything.
+diff --git a/docs/decisions/ADR-0006-contract-backlog.md b/docs/decisions/ADR-0006-contract-backlog.md
+index 1d7d3fb..1107da5 100644
+--- a/docs/decisions/ADR-0006-contract-backlog.md
++++ b/docs/decisions/ADR-0006-contract-backlog.md
+@@ -17,4 +17,4 @@ These were found during review. They change the API contract, so they were left
+ 
+ ## Dropped from scope
+ - **Order events, a transactional outbox and a RabbitMQ worker (formerly EVT-001).** They exist to feed a kitchen or delivery system, which this
+-  project does not build. The order lifecycle is kept as in-process state with a recorded history (LIFE-001, LIFE-002). RabbitMQ and PostgreSQL have since been removed from Compose (nothing used them); the `worker` remains as a placeholder (ADR-0010).
++  project does not build. The order lifecycle is kept as in-process state with a recorded history (LIFE-001, LIFE-002). RabbitMQ and PostgreSQL have since been removed from Compose (nothing used them); the placeholder `worker` was removed too (ADR-0010).
+diff --git a/docs/decisions/ADR-0010-decisions-outside-the-scope.md b/docs/decisions/ADR-0010-decisions-outside-the-scope.md
+index d2aabd5..d84c76d 100644
+--- a/docs/decisions/ADR-0010-decisions-outside-the-scope.md
++++ b/docs/decisions/ADR-0010-decisions-outside-the-scope.md
+@@ -2,7 +2,7 @@
+ 
+ **Status:** Proposed (none of this is built; it records what was left out on purpose and what each omission costs)
+ 
+-> **Update:** RabbitMQ and PostgreSQL were removed from Compose, because no code used them. The `worker` remains as a placeholder. The backlog is in [FUTURE-WORK.md](../FUTURE-WORK.md).
++> **Update:** RabbitMQ, PostgreSQL and the placeholder `worker` were removed, because no code used them. The backlog is in [FUTURE-WORK.md](../FUTURE-WORK.md).
+ 
+ The scope is one restaurant, anonymous customers, and an order service with a simulated restaurant side. These choices sit outside it. Each would have made the system safer or easier to run,
+ and each was left out to stay in the timebox.
+@@ -21,6 +21,6 @@ and each was left out to stay in the timebox.
+ | **Estimated time and notifications** | The customer wants to know when | A field on the order; push or SMS |
+ | **One error shape** (RFC 7807) and **contract tests** between the page and the service | One way to read an error; changes to the API cannot silently break the page | API-002; a shared contract file |
+ | **Structured logs with the idempotency key as a correlation id, plus basic metrics** | Support can follow one customer's retries; rising 409 and 412 rates show a problem | Logging and counters |
+-| **A message broker and a worker** (RabbitMQ was removed from Compose) | Nothing used them, which suggested an integration that did not exist | Add a broker back only when something consumes from it (for example a kitchen integration, itself out of scope). The `worker` only logs: remove it or give it work |
++| **A message broker and a worker** (both removed) | Nothing used them, which suggested an integration that did not exist | Add a broker and a worker back only when something consumes from the broker (for example a kitchen integration, itself out of scope) |
+ 
+ The two that matter most for correctness are the first (persistence with a unique key) and the fourth (a menu version), because they are the only two ways the current design can give a *wrong* answer rather than just a less convenient one.
+diff --git a/src/backend/LongPizzaOrderBuilder.Worker/LongPizzaOrderBuilder.Worker.csproj b/src/backend/LongPizzaOrderBuilder.Worker/LongPizzaOrderBuilder.Worker.csproj
+deleted file mode 100644
+index 32e0c93..0000000
+--- a/src/backend/LongPizzaOrderBuilder.Worker/LongPizzaOrderBuilder.Worker.csproj
++++ /dev/null
+@@ -1,10 +0,0 @@
+-<Project Sdk="Microsoft.NET.Sdk.Worker">
+-  <PropertyGroup>
+-    <TargetFramework>net10.0</TargetFramework>
+-    <Nullable>enable</Nullable>
+-    <ImplicitUsings>enable</ImplicitUsings>
+-  </PropertyGroup>
+-  <ItemGroup>
+-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+-  </ItemGroup>
+-</Project>
+diff --git a/src/backend/LongPizzaOrderBuilder.Worker/Program.cs b/src/backend/LongPizzaOrderBuilder.Worker/Program.cs
+deleted file mode 100644
+index d4e5750..0000000
+--- a/src/backend/LongPizzaOrderBuilder.Worker/Program.cs
++++ /dev/null
+@@ -1,16 +0,0 @@
+-using Microsoft.Extensions.Hosting;
+-
+-var builder = Host.CreateApplicationBuilder(args);
+-builder.Services.AddHostedService<Worker>();
+-await builder.Build().RunAsync();
+-
+-public sealed class Worker(ILogger<Worker> logger) : BackgroundService
+-{
+-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+-    {
+-        logger.LogInformation("Worker started. It is a placeholder with no work to do yet.");
+-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+-        while (await timer.WaitForNextTickAsync(stoppingToken))
+-            logger.LogInformation("Worker heartbeat at {Time}", DateTimeOffset.UtcNow);
+-    }
+-}
+diff --git a/src/frontend/src/components.css b/src/frontend/src/components.css
+index 4b09e53..69a1e82 100644
+--- a/src/frontend/src/components.css
++++ b/src/frontend/src/components.css
+@@ -1,6 +1,5 @@
+ /* Styles for the multi-pizza cart, accessible controls and the order-details dialog.
+    Reuses the palette from style.css (#e45d37 accent, #eee6d8 borders). */
+-.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+ :where(button,input,select,a):focus-visible{outline:3px solid #e45d37;outline-offset:2px}
+ 
+ .cart-lines{list-style:none;margin:0;padding:0}
+diff --git a/src/frontend/src/style.css b/src/frontend/src/style.css
+index b6ad323..72fc31b 100644
+--- a/src/frontend/src/style.css
++++ b/src/frontend/src/style.css
+@@ -1,2 +1,2 @@
+ @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap');
+-:root{font-family:'DM Sans',sans-serif;color:#25241f;background:#fbf8f2;font-synthesis:none;text-rendering:optimizeLegibility;font-optical-sizing:auto}*{box-sizing:border-box}body{margin:0;min-width:320px}.app-shell{max-width:1180px;margin:auto;padding:0 34px}.topbar{height:82px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #eee7da}.brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:#26251f;font-family:Outfit,sans-serif;font-weight:800;font-size:1.15rem;letter-spacing:-.04em}.brand-mark{display:grid;place-items:center;width:38px;height:38px;background:#fff0dd;border-radius:12px;font-size:1.35rem}.brand-accent{color:#e45d37}.order-tag{font-size:.7rem;letter-spacing:.12em;font-weight:800;color:#746d61;display:flex;align-items:center;gap:8px}.live-dot{width:7px;height:7px;border-radius:50%;background:#52a46b}.hero{display:grid;grid-template-columns:1fr 1fr;align-items:center;min-height:350px;padding:28px 3% 38px;border-bottom:1px solid #eee7da;overflow:hidden}.eyebrow{margin:0 0 10px;font-size:.69rem;letter-spacing:.16em;font-weight:800;color:#e45d37}.hero h1{font-family:Outfit,sans-serif;font-size:clamp(3.2rem,6vw,5.6rem);line-height:.94;letter-spacing:-.065em;margin:0}.hero h1 span{color:#e45d37}.hero-subtitle{max-width:390px;color:#777166;line-height:1.7;margin:22px 0}.hero-perks{display:flex;gap:18px;flex-wrap:wrap;font-size:.77rem;color:#71695e;font-weight:700}.hero-art{position:relative;min-height:290px;display:grid;place-items:center}.pizza-shadow{position:absolute;width:280px;height:36px;border-radius:50%;background:#dfd0b7;filter:blur(12px);bottom:23px;transform:rotate(-12deg)}.pizza{position:relative;width:270px;height:270px;border-radius:50%;background:#c77c36;box-shadow:inset 0 0 0 10px #e9ad5d, inset 0 0 0 17px #f9d88e,0 18px 30px #a76d3433;transform:rotate(-13deg);border:3px solid #d8994e}.pizza-cheese{position:absolute;inset:19px;border-radius:50%;background:radial-gradient(circle at 30% 20%,#ffedb0,#f4c75e 65%,#e9a744)}.pepperoni{position:absolute;width:37px;height:37px;border-radius:50%;background:#c8492e;border:5px solid #e96b40;box-shadow:inset 0 0 0 2px #ad3825;z-index:2}.p1{top:53px;left:68px}.p2{top:42px;right:59px}.p3{top:115px;left:113px}.p4{bottom:45px;left:66px}.p5{bottom:39px;right:50px}.p6{top:143px;right:29px}.basil{position:absolute;color:#5d853d;font-size:2.2rem;z-index:3}.b1{top:90px;left:37px;transform:rotate(24deg)}.b2{bottom:42px;right:105px;transform:rotate(70deg)}.floating-note{position:absolute;right:4%;top:18%;background:#fff;border:1px solid #f1e7d7;border-radius:99px;padding:11px 15px;font-size:.65rem;letter-spacing:.12em;font-weight:800;color:#d85835;box-shadow:0 8px 30px #4b32100d;transform:rotate(8deg)}.builder-layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:48px;padding:44px 3% 64px;align-items:start}.section-heading{display:flex;justify-content:space-between;align-items:center;margin:0 0 19px}.section-heading h2,.order-card h2{font-family:Outfit,sans-serif;font-size:1.55rem;letter-spacing:-.04em;margin:0}.section-heading .eyebrow{margin-bottom:5px}.step-count{font-size:.7rem;color:#aaa092;font-weight:800;letter-spacing:.08em}.size-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.size-card{position:relative;display:flex;flex-direction:column;align-items:center;gap:7px;padding:18px 8px 16px;background:#fff;border:1px solid #eee6d8;border-radius:16px;color:inherit;cursor:pointer;font:inherit;transition:.15s}.size-card:hover,.topping-card:hover,.crust-option:hover{border-color:#e6a58b;transform:translateY(-1px)}.size-card.selected,.crust-option.selected,.topping-card.selected{border-color:#e45d37;background:#fff8f3;box-shadow:0 0 0 1px #e45d3710}.size-pizza{font-size:2.4rem;filter:saturate(.8)}.size-pizza.small{transform:scale(.78)}.size-pizza.large{transform:scale(1.14)}.size-card strong{font-size:.95rem}.muted{font-size:.65rem;color:#928a7f;text-align:center;min-height:28px}.size-card>b{font-size:.9rem}.selected-check{position:absolute;top:8px;right:9px;background:#e45d37;color:white;border-radius:50%;font-size:.65rem;width:19px;height:19px;display:grid;place-items:center}.next-heading{margin-top:37px}.section-subtitle{margin:7px 0 0;color:#8c8377;font-size:.83rem}.crust-list{display:grid;gap:9px}.crust-option{width:100%;display:flex;align-items:center;gap:12px;text-align:left;padding:12px 14px;background:white;border:1px solid #eee6d8;border-radius:13px;color:inherit;cursor:pointer;font:inherit;transition:.15s}.crust-icon{display:grid;place-items:center;width:40px;height:40px;background:#f8f1e7;border-radius:11px;font-size:1.35rem}.crust-option strong,.crust-option small{display:block}.crust-option strong{font-size:.86rem}.crust-option small{margin-top:4px;color:#958c80;font-size:.72rem}.extra-price{margin-left:auto;font-size:.75rem;color:#d45a37;font-weight:700}.radio-dot{margin-left:auto;flex-shrink:0;width:20px;height:20px;border:1px solid #ded4c7;border-radius:50%;display:grid;place-items:center;color:white;font-size:.7rem}.selected .radio-dot{background:#e45d37;border-color:#e45d37}.topping-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.topping-card{position:relative;display:grid;grid-template-columns:36px 1fr;grid-template-rows:auto auto;align-items:center;gap:2px 9px;text-align:left;padding:13px 12px;background:#fff;border:1px solid #eee6d8;border-radius:13px;color:inherit;cursor:pointer;font:inherit;transition:.15s}.topping-emoji{grid-row:1/3;display:grid;place-items:center;width:35px;height:35px;background:#f8f2e9;border-radius:10px;font-size:1.25rem}.topping-name{font-size:.78rem;font-weight:700;padding-right:14px}.topping-price{font-size:.68rem;color:#958c80}.topping-check{position:absolute;right:10px;top:10px;width:18px;height:18px;border-radius:6px;background:#f5f0e8;color:#8e8578;display:grid;place-items:center;font-size:.72rem}.selected .topping-check{background:#e45d37;color:white}.field-label{display:block;font-size:.82rem;font-weight:700;margin:0 0 9px}.name-input{width:100%;border:1px solid #e8dfd2;border-radius:12px;padding:14px 15px;background:white;font:inherit;outline:none}.name-input:focus{border-color:#e45d37;box-shadow:0 0 0 3px #e45d3715}.order-card{position:sticky;top:24px;background:white;border:1px solid #eee5d8;border-radius:20px;padding:22px;box-shadow:0 12px 40px #4c35100a}.order-card-header{display:flex;align-items:center;gap:11px;padding-bottom:19px;border-bottom:1px solid #f0e9df}.receipt-icon{width:39px;height:39px;display:grid;place-items:center;border-radius:12px;background:#fff0e5;color:#e45d37;font-size:1.3rem}.order-card-header .eyebrow{font-size:.61rem;margin-bottom:3px}.order-card h2{font-size:1.3rem}.order-preview{display:flex;gap:12px;align-items:center;padding:19px 0;border-bottom:1px solid #f0e9df}.preview-emoji{font-size:2.4rem}.order-preview strong{font-size:.9rem}.order-preview p{margin:5px 0 0;font-size:.73rem;color:#8b8276;line-height:1.5}.quantity-row{display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-bottom:1px solid #f0e9df;font-size:.82rem;font-weight:700}.quantity-control{display:flex;align-items:center;gap:15px}.quantity-control button{border:1px solid #eee3d6;background:#fff8f0;width:27px;height:27px;border-radius:8px;color:#55473b;font-size:1rem;cursor:pointer}.quantity-control button:disabled{opacity:.35;cursor:not-allowed}.price-line{display:flex;justify-content:space-between;color:#8a8175;font-size:.78rem;margin-top:14px}.price-line span:last-child{color:#39352e;font-weight:600}.total-line{display:flex;justify-content:space-between;align-items:center;margin-top:19px;padding-top:17px;border-top:1px dashed #e8dfd2}.total-line span{font-weight:700}.total-line strong{font-family:Outfit,sans-serif;font-size:1.8rem;letter-spacing:-.05em;color:#e45d37}.tax-note{font-size:.67rem;color:#a1988b;margin:4px 0 19px}.place-order{width:100%;display:flex;justify-content:space-between;align-items:center;padding:15px 17px;background:#e45d37;color:#fff;border:0;border-radius:12px;font:inherit;font-size:.88rem;font-weight:800;cursor:pointer;box-shadow:0 6px 14px #e45d372b;transition:.15s}.place-order:hover{background:#ce4927;transform:translateY(-1px)}.place-order:disabled{opacity:.65;cursor:wait}.place-order span{font-size:1.3rem}.secure-note{text-align:center;color:#999082;font-size:.7rem;margin:13px 0 0}.error{font-size:.8rem;color:#b42318;line-height:1.5}.success-box{margin-top:17px;padding:14px;background:#f0faf1;border:1px solid #d5edd8;border-radius:12px;color:#28633b;font-size:.8rem;line-height:1.5}.success-box p{margin:6px 0}.success-box span{font-weight:800}.notice{color:#82796e}footer{display:flex;justify-content:space-between;gap:15px;padding:23px 3%;border-top:1px solid #eee7da;color:#938a7e;font-size:.73rem}footer span:first-child{font-weight:800;color:#6c6257}@media(max-width:850px){.builder-layout{grid-template-columns:minmax(0,1fr) 290px;gap:24px;padding-left:0;padding-right:0}.hero{padding-left:0;padding-right:0}.pizza{transform:scale(.84) rotate(-13deg)}.hero-art{min-height:250px}}@media(max-width:650px){.app-shell{padding:0 18px}.topbar{height:70px}.brand{font-size:.97rem}.order-tag{font-size:.58rem}.hero{grid-template-columns:1fr;padding:42px 0 20px}.hero h1{font-size:4rem}.hero-art{min-height:230px;grid-row:1;grid-column:1;margin-bottom:14px}.pizza{transform:scale(.75) rotate(-13deg)}.pizza-shadow{bottom:4px}.floating-note{right:9%;top:10%}.builder-layout{grid-template-columns:1fr;padding-top:30px}.order-card{position:static;grid-row:1}.size-card{padding:14px 5px}.size-pizza{font-size:1.9rem}.muted{font-size:.6rem}.topping-grid{gap:8px}.topping-card{padding:11px 8px;grid-template-columns:31px 1fr;gap:2px 7px}.topping-emoji{width:30px;height:30px;font-size:1.05rem}.topping-name{font-size:.72rem}.section-heading h2{font-size:1.4rem}footer{padding:20px 0;flex-direction:column}}
++:root{font-family:'DM Sans',sans-serif;color:#25241f;background:#fbf8f2;font-synthesis:none;text-rendering:optimizeLegibility;font-optical-sizing:auto}*{box-sizing:border-box}body{margin:0;min-width:320px}.app-shell{max-width:1180px;margin:auto;padding:0 34px}.topbar{height:82px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #eee7da}.brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:#26251f;font-family:Outfit,sans-serif;font-weight:800;font-size:1.15rem;letter-spacing:-.04em}.brand-mark{display:grid;place-items:center;width:38px;height:38px;background:#fff0dd;border-radius:12px;font-size:1.35rem}.brand-accent{color:#e45d37}.hero{display:grid;grid-template-columns:1fr 1fr;align-items:center;min-height:350px;padding:28px 3% 38px;border-bottom:1px solid #eee7da;overflow:hidden}.eyebrow{margin:0 0 10px;font-size:.69rem;letter-spacing:.16em;font-weight:800;color:#e45d37}.hero h1{font-family:Outfit,sans-serif;font-size:clamp(3.2rem,6vw,5.6rem);line-height:.94;letter-spacing:-.065em;margin:0}.hero h1 span{color:#e45d37}.hero-subtitle{max-width:390px;color:#777166;line-height:1.7;margin:22px 0}.pizza{position:relative;width:270px;height:270px;border-radius:50%;background:#c77c36;box-shadow:inset 0 0 0 10px #e9ad5d, inset 0 0 0 17px #f9d88e,0 18px 30px #a76d3433;transform:rotate(-13deg);border:3px solid #d8994e}.pepperoni{position:absolute;width:37px;height:37px;border-radius:50%;background:#c8492e;border:5px solid #e96b40;box-shadow:inset 0 0 0 2px #ad3825;z-index:2}.builder-layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:48px;padding:44px 3% 64px;align-items:start}.section-heading{display:flex;justify-content:space-between;align-items:center;margin:0 0 19px}.section-heading h2,.order-card h2{font-family:Outfit,sans-serif;font-size:1.55rem;letter-spacing:-.04em;margin:0}.section-heading .eyebrow{margin-bottom:5px}.step-count{font-size:.7rem;color:#aaa092;font-weight:800;letter-spacing:.08em}.size-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.size-card{position:relative;display:flex;flex-direction:column;align-items:center;gap:7px;padding:18px 8px 16px;background:#fff;border:1px solid #eee6d8;border-radius:16px;color:inherit;cursor:pointer;font:inherit;transition:.15s}.size-card:hover,.topping-card:hover,.crust-option:hover{border-color:#e6a58b;transform:translateY(-1px)}.size-card.selected,.crust-option.selected,.topping-card.selected{border-color:#e45d37;background:#fff8f3;box-shadow:0 0 0 1px #e45d3710}.size-pizza{font-size:2.4rem;filter:saturate(.8)}.size-pizza.small{transform:scale(.78)}.size-pizza.large{transform:scale(1.14)}.size-card strong{font-size:.95rem}.muted{font-size:.65rem;color:#928a7f;text-align:center;min-height:28px}.size-card>b{font-size:.9rem}.next-heading{margin-top:37px}.section-subtitle{margin:7px 0 0;color:#8c8377;font-size:.83rem}.crust-list{display:grid;gap:9px}.crust-option{width:100%;display:flex;align-items:center;gap:12px;text-align:left;padding:12px 14px;background:white;border:1px solid #eee6d8;border-radius:13px;color:inherit;cursor:pointer;font:inherit;transition:.15s}.crust-icon{display:grid;place-items:center;width:40px;height:40px;background:#f8f1e7;border-radius:11px;font-size:1.35rem}.crust-option strong,.crust-option small{display:block}.crust-option strong{font-size:.86rem}.crust-option small{margin-top:4px;color:#958c80;font-size:.72rem}.topping-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.topping-card{position:relative;display:grid;grid-template-columns:36px 1fr;grid-template-rows:auto auto;align-items:center;gap:2px 9px;text-align:left;padding:13px 12px;background:#fff;border:1px solid #eee6d8;border-radius:13px;color:inherit;cursor:pointer;font:inherit;transition:.15s}.topping-emoji{grid-row:1/3;display:grid;place-items:center;width:35px;height:35px;background:#f8f2e9;border-radius:10px;font-size:1.25rem}.topping-name{font-size:.78rem;font-weight:700;padding-right:14px}.topping-price{font-size:.68rem;color:#958c80}.topping-check{position:absolute;right:10px;top:10px;width:18px;height:18px;border-radius:6px;background:#f5f0e8;color:#8e8578;display:grid;place-items:center;font-size:.72rem}.selected .topping-check{background:#e45d37;color:white}.field-label{display:block;font-size:.82rem;font-weight:700;margin:0 0 9px}.name-input{width:100%;border:1px solid #e8dfd2;border-radius:12px;padding:14px 15px;background:white;font:inherit;outline:none}.name-input:focus{border-color:#e45d37;box-shadow:0 0 0 3px #e45d3715}.order-card{position:sticky;top:24px;background:white;border:1px solid #eee5d8;border-radius:20px;padding:22px;box-shadow:0 12px 40px #4c35100a}.order-card-header{display:flex;align-items:center;gap:11px;padding-bottom:19px;border-bottom:1px solid #f0e9df}.order-card-header .eyebrow{font-size:.61rem;margin-bottom:3px}.order-card h2{font-size:1.3rem}.quantity-control{display:flex;align-items:center;gap:15px}.quantity-control button{border:1px solid #eee3d6;background:#fff8f0;width:27px;height:27px;border-radius:8px;color:#55473b;font-size:1rem;cursor:pointer}.quantity-control button:disabled{opacity:.35;cursor:not-allowed}.price-line{display:flex;justify-content:space-between;color:#8a8175;font-size:.78rem;margin-top:14px}.price-line span:last-child{color:#39352e;font-weight:600}.total-line{display:flex;justify-content:space-between;align-items:center;margin-top:19px;padding-top:17px;border-top:1px dashed #e8dfd2}.total-line span{font-weight:700}.total-line strong{font-family:Outfit,sans-serif;font-size:1.8rem;letter-spacing:-.05em;color:#e45d37}.tax-note{font-size:.67rem;color:#a1988b;margin:4px 0 19px}.place-order{width:100%;display:flex;justify-content:space-between;align-items:center;padding:15px 17px;background:#e45d37;color:#fff;border:0;border-radius:12px;font:inherit;font-size:.88rem;font-weight:800;cursor:pointer;box-shadow:0 6px 14px #e45d372b;transition:.15s}.place-order:hover{background:#ce4927;transform:translateY(-1px)}.place-order:disabled{opacity:.65;cursor:wait}.place-order span{font-size:1.3rem}.error{font-size:.8rem;color:#b42318;line-height:1.5}.notice{color:#82796e}footer{display:flex;justify-content:space-between;gap:15px;padding:23px 3%;border-top:1px solid #eee7da;color:#938a7e;font-size:.73rem}footer span:first-child{font-weight:800;color:#6c6257}@media(max-width:850px){.builder-layout{grid-template-columns:minmax(0,1fr) 290px;gap:24px;padding-left:0;padding-right:0}.hero{padding-left:0;padding-right:0}.pizza{transform:scale(.84) rotate(-13deg)}}@media(max-width:650px){.app-shell{padding:0 18px}.topbar{height:70px}.brand{font-size:.97rem}.hero{grid-template-columns:1fr;padding:42px 0 20px}.hero h1{font-size:4rem}.pizza{transform:scale(.75) rotate(-13deg)}.builder-layout{grid-template-columns:1fr;padding-top:30px}.order-card{position:static;grid-row:1}.size-card{padding:14px 5px}.size-pizza{font-size:1.9rem}.muted{font-size:.6rem}.topping-grid{gap:8px}.topping-card{padding:11px 8px;grid-template-columns:31px 1fr;gap:2px 7px}.topping-emoji{width:30px;height:30px;font-size:1.05rem}.topping-name{font-size:.72rem}.section-heading h2{font-size:1.4rem}footer{padding:20px 0;flex-direction:column}}
+-- 
+2.43.0
+

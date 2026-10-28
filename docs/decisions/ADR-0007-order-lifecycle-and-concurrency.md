@@ -28,7 +28,7 @@ kitchen presses Start. The project has no authentication, one restaurant, and an
 - **A lock per order.** Rejected as unneeded: one restaurant's order volume does not contend on one lock, and one lock is easier to reason about.
 - **Database row locks or serializable transactions.** The right answer for several API instances. Deferred to the persistence work; the store's
   interface (`Create`, `Transition`) is the seam.
-- **Letting the customer cancel while InProgress.** Rejected as a business rule (the food is being made). **This is an assumption to confirm with the restaurant.**
+- **Letting the customer cancel while InProgress.** Rejected as a business rule (the food is being made). **Confirmed as the business rule.**
 - **Taking the role from a request field or header.** Rejected: unauthenticated, so it would only look like access control.
 
 ## Consequences

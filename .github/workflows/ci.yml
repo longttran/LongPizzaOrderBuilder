@@ -64,17 +64,10 @@ jobs:
         run: docker build -f deploy/docker/api.Dockerfile -t longpizzaorderbuilder-api:${{ github.sha }} .
       - name: Build order service image
         run: docker build -f deploy/docker/orderservice.Dockerfile -t longpizzaorderbuilder-orderservice:${{ github.sha }} .
-      - name: Build worker image
-        run: docker build -f deploy/docker/worker.Dockerfile -t longpizzaorderbuilder-worker:${{ github.sha }} .
       - name: Build production frontend image
         run: docker build -f deploy/docker/frontend.Dockerfile -t longpizzaorderbuilder-frontend:${{ github.sha }} .
       - name: Run self-hosted Compose smoke test
         env:
-          POSTGRES_DB: longpizza_ci
-          POSTGRES_USER: longpizza_ci
-          POSTGRES_PASSWORD: ci-postgres-password
-          RABBITMQ_DEFAULT_USER: ci-rabbit
-          RABBITMQ_DEFAULT_PASS: ci-rabbit-password
           HTTP_PORT: 8088
         run: |
           set -euo pipefail

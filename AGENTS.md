@@ -4,8 +4,8 @@ Guidance for AI coding agents and new contributors. `CLAUDE.md` imports this fil
 
 ## What this is
 LongPizzaOrderBuilder: customers build one or more pizzas, watch a running total, and send the order to a **separate order service** that holds the order and its lifecycle
-(Not Started, Started, Ready for Pickup, Delivered, Cancelled). React + TypeScript page, two ASP.NET Core (.NET 10) back ends, and a shared pricing library. PostgreSQL, RabbitMQ and a worker are
-provisioned but **not used by the order flow**; orders are held in the order service's memory. Treat it as a prototype, not a production ordering system. Scope: one restaurant, anonymous customers, no auth, payments, kitchen integration, menu admin or multiple locations.
+(Not Started, Started, Ready for Pickup, Delivered, Cancelled). React + TypeScript page, two ASP.NET Core (.NET 10) back ends, and a shared pricing library. There is no database or message broker (RabbitMQ and PostgreSQL were removed from Compose because nothing used them); orders are held in the order service's
+memory. Treat it as a prototype, not a production ordering system. Scope: one restaurant, anonymous customers, no auth, payments, kitchen integration, menu admin or multiple locations.
 
 ## Layout
 - `src/backend/LongPizzaOrderBuilder.Pricing`: the menu data (`PizzaMenu`) and `PricingService`, the only place prices are calculated. Used by both back ends.

@@ -14,8 +14,7 @@
 From the repository root:
 
 ```bash
-cp .env.example .env
-# Windows PowerShell: Copy-Item .env.example .env
+# Optional: cp .env.example .env   (Windows PowerShell: Copy-Item .env.example .env). Compose runs without a .env file.
 docker compose up --build
 ```
 
@@ -25,15 +24,16 @@ Development endpoints:
 - API: <http://localhost:8080>
 - Menu: <http://localhost:8080/api/menu>
 - Pricing preview: `POST http://localhost:8080/api/pricing/preview`
-- Orders: <http://localhost:8080/api/orders>
+- Order service: <http://localhost:8090> (orders at `/api/orders`, the restaurant's side at `/api/restaurant/orders`)
+- Order service health: <http://localhost:8090/health>
 - API health: <http://localhost:8080/health>
 - OpenAPI in development: <http://localhost:8080/openapi/v1.json>
-- RabbitMQ management: <http://localhost:15672>
-- PostgreSQL: `localhost:5432`
+
+There is no database or message broker: RabbitMQ and PostgreSQL were removed from Compose because no code used them (see [FUTURE-WORK.md](FUTURE-WORK.md)). If you ran an earlier version of the stack, run `docker compose up --build --remove-orphans` once to clear the old `postgres` and `rabbitmq` containers; their leftover volumes can be listed with `docker volume ls` and deleted with `docker volume rm`.
 
 #### Verify the .NET SDK
 
-The API, Worker, and test projects target **.NET 10**. Install the .NET 10 SDK from the [official .NET download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) if it is not already installed. On Windows, WinGet is also available:
+The API, order service, pricing library, and test projects target **.NET 10**. Install the .NET 10 SDK from the [official .NET download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) if it is not already installed. On Windows, WinGet is also available:
 
 ```powershell
 winget install Microsoft.DotNet.SDK.10
@@ -50,7 +50,7 @@ The repository's `global.json` selects the .NET 10 SDK family. SDKs can be insta
 
 #### Run backend tests
 
-Run these commands from the repository root. The solution includes the API, Worker, and the separate unit and integration test projects:
+Run these commands from the repository root. The solution includes the API, order service, pricing library, and the separate unit and integration test projects:
 
 ```powershell
 dotnet restore .\LongPizzaOrderBuilder.slnx
@@ -90,28 +90,28 @@ Suggested frontend tools: [Prettier](https://prettier.io/) for consistent format
 
 ### Self-host with production-style containers
 
-The `compose.selfhost.yaml` profile builds a static frontend image served by Nginx, an ASP.NET Core API image, a worker image, PostgreSQL, and RabbitMQ. Nginx exposes the app on one host port and proxies `/api` to the API over the private Compose network. PostgreSQL and RabbitMQ do not publish host ports in this profile.
+The `compose.selfhost.yaml` profile builds a static frontend image served by Nginx, an ASP.NET Core API image, and an order service image. Nginx exposes the app on one host port and proxies `/api` to the API over the private Compose network. The restaurant routes are not published.
 
-1. Copy `.env.example` to `.env` and replace **every** example password with a long, unique secret. Keep `.env` out of source control.
+1. Optional: copy `.env.example` to `.env` to change a setting. There are no passwords now. Keep `.env` out of source control.
 2. Start the stack:
 
    ```bash
    docker compose -f compose.selfhost.yaml up --build -d
    ```
 
-3. Open <http://localhost:8088> (or the port configured by `HTTP_PORT`). Check `docker compose -f compose.selfhost.yaml ps` and `docker compose -f compose.selfhost.yaml logs -f api frontend worker` for health and startup errors.
-4. Stop the stack with `docker compose -f compose.selfhost.yaml down`. This preserves named data volumes. To remove volumes as well, `docker compose -f compose.selfhost.yaml down -v` permanently deletes the local database/broker data.
+3. Open <http://localhost:8088> (or the port configured by `HTTP_PORT`). Check `docker compose -f compose.selfhost.yaml ps` and `docker compose -f compose.selfhost.yaml logs -f api orderservice frontend` for health and startup errors.
+4. Stop the stack with `docker compose -f compose.selfhost.yaml down`. There are no data volumes now: orders are held in memory and are lost when the order service stops.
 
 Self-hosting notes:
 
-- Expose only the frontend/reverse-proxy port to the LAN or internet. Do not publish PostgreSQL or RabbitMQ ports publicly.
+- Expose only the frontend/reverse-proxy port to the LAN or internet. Do not publish the order service's restaurant routes (`/api/restaurant`); they have no authentication.
 - Put TLS in front of the app before exposing it to the internet; configure firewall rules, host patching, secret rotation, and tested backups.
-- PostgreSQL and RabbitMQ containers are included as infrastructure, but **the current application does not yet persist orders to PostgreSQL or publish/consume RabbitMQ events**. The worker is a scaffold, not an order processor. The database volume alone does not make orders durable.
+- There is no database or message broker. Orders live in the order service's memory, so a restart loses them.
 - The self-host profile is therefore suitable for verifying container wiring and a demo, not yet for handling real customer orders.
 
 ### Cloud portability
 
-Keep application images provider-neutral and configuration in environment variables/secrets. Once a cloud is selected, choose a managed container runtime, managed PostgreSQL, and an appropriate managed queue or RabbitMQ hosting option; add registry publishing, secret integration, TLS/domain configuration, backups, monitoring, and deployment/rollback automation. Do not commit to Azure, AWS, or Google Cloud-specific services until the deployment requirements and budget are clearer.
+Keep application images provider-neutral and configuration in environment variables/secrets. Once a cloud is selected, choose a managed container runtime and, once persistence is built, a managed database; add registry publishing, secret integration, TLS/domain configuration, backups, monitoring, and deployment/rollback automation. Do not commit to Azure, AWS, or Google Cloud-specific services until the deployment requirements and budget are clearer.
 
 ## First Git repository upload
 

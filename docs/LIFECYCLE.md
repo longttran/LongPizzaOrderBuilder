@@ -27,7 +27,7 @@ Four ideas make it safe on unreliable mobile connections:
 3. **Whoever is refused is told the truth.** A refusal is HTTP 409 and carries the order *as it now is*, and the page shows that, not a guess.
 4. **Customers and the restaurant use different doors.** `/api/orders` is the customer's; `/api/restaurant/orders` is the restaurant's. The caller's role comes from the door, never from anything the request claims.
 
-**Who may do what.** The customer may cancel, only while Not Started. The restaurant moves an order one step forward and cannot cancel. There is no authentication in this
+**Who may do what.** The customer may cancel, only while Not Started (this rule is confirmed). The restaurant moves an order one step forward and cannot cancel. There is no authentication in this
 project, so anyone who can reach the restaurant routes can use them; keep the service off the public internet.
 
 ## Scenario 1: the customer retries after a timeout

@@ -1,5 +1,5 @@
-# Self-hosting deployment scaffold. Do not expose PostgreSQL/RabbitMQ publicly.
-# Orders are still in-memory until EF Core persistence is implemented; this is not production-safe yet.
+# Self-hosting deployment scaffold. Orders are held in the order service's memory (lost on restart) until persistence is built
+# (see docs/FUTURE-WORK.md), so this is for demos and checking the container wiring, not for real customers.
 services:
   frontend:
     build:
@@ -46,69 +46,10 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      RabbitMq__Host: rabbitmq
-      RabbitMq__User: ${RABBITMQ_DEFAULT_USER:?Set RABBITMQ_DEFAULT_USER in .env}
-      RabbitMq__Password: ${RABBITMQ_DEFAULT_PASS:?Set RABBITMQ_DEFAULT_PASS in .env}
-      ConnectionStrings__Default: Host=postgres;Port=5432;Database=${POSTGRES_DB:-longpizzaorderbuilder};Username=${POSTGRES_USER:?Set POSTGRES_USER in .env};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     expose:
       - "8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
       interval: 15s
       timeout: 3s
       retries: 5
-
-  worker:
-    build:
-      context: .
-      dockerfile: deploy/docker/worker.Dockerfile
-    restart: unless-stopped
-    environment:
-      RabbitMq__Host: rabbitmq
-      RabbitMq__User: ${RABBITMQ_DEFAULT_USER:?Set RABBITMQ_DEFAULT_USER in .env}
-      RabbitMq__Password: ${RABBITMQ_DEFAULT_PASS:?Set RABBITMQ_DEFAULT_PASS in .env}
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-
-  postgres:
-    image: postgres:17-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-longpizzaorderbuilder}
-      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    expose:
-      - "5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-  rabbitmq:
-    image: rabbitmq:4-management-alpine
-    restart: unless-stopped
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?Set RABBITMQ_DEFAULT_USER in .env}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?Set RABBITMQ_DEFAULT_PASS in .env}
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    expose:
-      - "5672"
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-volumes:
-  postgres_data:
-  rabbitmq_data:

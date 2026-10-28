@@ -6,17 +6,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
-      RabbitMq__Host: rabbitmq
-      RabbitMq__User: ${RABBITMQ_DEFAULT_USER:-app}
-      RabbitMq__Password: ${RABBITMQ_DEFAULT_PASS:-local-dev-change-me}
-      ConnectionStrings__Default: Host=postgres;Port=5432;Database=${POSTGRES_DB:-longpizzaorderbuilder};Username=${POSTGRES_USER:-longpizzaorderbuilder};Password=${POSTGRES_PASSWORD:-local-dev-change-me}
     ports:
       - "8080:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
       interval: 15s
@@ -60,51 +51,5 @@ services:
       orderservice:
         condition: service_healthy
 
-  worker:
-    build:
-      context: .
-      dockerfile: deploy/docker/worker.Dockerfile
-    environment:
-      RabbitMq__Host: rabbitmq
-      RabbitMq__User: ${RABBITMQ_DEFAULT_USER:-app}
-      RabbitMq__Password: ${RABBITMQ_DEFAULT_PASS:-local-dev-change-me}
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-
-  postgres:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-longpizzaorderbuilder}
-      POSTGRES_USER: ${POSTGRES_USER:-longpizzaorderbuilder}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-change-me}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-longpizzaorderbuilder} -d ${POSTGRES_DB:-longpizzaorderbuilder}"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-  rabbitmq:
-    image: rabbitmq:4-management-alpine
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-app}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-local-dev-change-me}
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
 volumes:
-  postgres_data:
-  rabbitmq_data:
   frontend_node_modules:

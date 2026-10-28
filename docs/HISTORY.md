@@ -24,6 +24,15 @@
 
 ## Revision history
 
+### 2026-10-28 — Infrastructure trimmed, rule confirmed, dependency and AI-usage notes
+- **RabbitMQ and PostgreSQL removed** from `compose.yaml`, `compose.selfhost.yaml`, `.env.example` and the CI smoke test, with the settings, volumes and `depends_on` entries that went with them. No code used either. If you ran the old stack, use `docker compose up --build --remove-orphans` once.
+- **Usage audit:** the placeholder `worker` (project, Dockerfile, two compose services, a CI image build and its solution entry) and 26 unused CSS rules (25 prototype leftovers in `style.css`, one in `components.css`) were removed. Everything else was checked and is used; see `docs/USAGE-AUDIT.md`.
+- **Confirmed:** a customer can cancel only while the order is Not Started. Recorded in `DESIGN.md`, `LIFECYCLE.md` and ADR-0007.
+- **Deferred as out of scope for this session:** changing a placed order (`docs/FUTURE-WORK.md`, which now opens with a one-page backlog of every deferred item).
+- **New:** `docs/DEPENDENCY-NOTES.md` (what `npm ci` reports: deprecations, 4 dev-tooling vulnerabilities with 0 in production, and the esbuild install-scripts warning) and `docs/AI-USAGE-GUIDE.md`.
+- **Fixed:** the `xUnit2031` analyzer warning in `OrderIdempotencyTests`.
+- **README rewritten to be shorter.**
+
 ### 2026-10-28 — Fixes from the first real build (Windows, stock xunit and its analyzers)
 - **Compile error CS0433 (4 errors):** the order service's `Program.cs` used top-level statements, which generate a type named `Program`; the builder API already has one, and the integration-test project references both, so the type name was ambiguous. The service's entry point is now an explicit `OrderServiceProgram.Main`. This could not be seen earlier because the stand-in test runner compiled everything into one assembly; the check harness now builds the tests as a separate assembly referencing both back ends, which reproduces the error exactly.
 - **41 xunit analyzer warnings:** `xUnit2013` (`Assert.Equal(0|1, collection.Count)` is now `Assert.Empty` / `Assert.Single`), `xUnit2017` (`Assert.True(set.Contains(x))` is now `Assert.Contains`), and `xUnit1031` (the race tests blocked on tasks with `Wait`, `WaitAll` and `.Result`; they are now `async` and `await`).

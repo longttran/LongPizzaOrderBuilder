@@ -13,7 +13,7 @@ The system is one restaurant with anonymous customers. These constraints were ch
 | No authentication | Met | No auth code anywhere in `src/` or `tests/`. The customer gives a name for the order and nothing else. |
 | No customer accounts | Met | No user model, sessions or login UI. |
 | No real payments | Met | The tip is a number added to the total. No payment provider, card fields or charge calls. |
-| No kitchen or delivery integration | Met in code, not in infrastructure | No code sends orders to a kitchen. The restaurant side is simulated (an endpoint, `scripts/restaurant.sh`, an optional timer). The Compose stack still starts a `worker`, RabbitMQ and PostgreSQL that nothing uses (ADR-0010). |
+| No kitchen or delivery integration | Met | No code sends orders to a kitchen. The restaurant side is simulated (an endpoint, `scripts/restaurant.sh`, an optional timer). RabbitMQ, PostgreSQL and a placeholder `worker` were removed because nothing used them (ADR-0010). |
 | No menu administration UI | Met | The menu is read-only data. |
 | No multiple locations | Met | One menu, one tax rate, one store. |
 | Prioritise correct pricing | Met | Section 4. |
@@ -21,8 +21,8 @@ The system is one restaurant with anonymous customers. These constraints were ch
 
 ## 2. Assumptions
 
-Each assumption is implemented in one place and checked by a test where marked. Items 3, 15 and 16 are the ones that most need a
-business owner to confirm.
+Each assumption is implemented in one place and checked by a test where marked. Item 3 and item 15 are the ones that most need a
+business owner to confirm. Item 16 is confirmed.
 
 | # | Assumption | Where | Tested |
 |---|---|---|---|
@@ -41,7 +41,7 @@ business owner to confirm.
 | 13 | An empty order has no price and cannot be submitted. The UI shows $0.00. | `Validate`, UI | PRC-014, ORD-001, UI-004 |
 | 14 | An order is priced by the order service when it is sent, with the shared pricing library. The builder's preview may be out of date if the menu changed; the service's price is the one that counts, and it never changes after the order is placed. | `OrderStore` | ORD-002, ORD-003 |
 | 15 | **Orders and idempotency keys live in the order service's memory and are lost on restart.** This is a prototype limit, not a design goal (ADR-0010). | `OrderStore` | n/a |
-| 16 | **A customer may cancel only while the order is Not Started.** After the restaurant starts, cancelling is refused. This is a business rule to confirm with the restaurant (it comes from the brief). **Changing a placed order is deliberately not built:** a customer who wants a change cancels and places a new order. See [FUTURE-WORK.md](FUTURE-WORK.md). | `OrderLifecycle` | LIFE-004 |
+| 16 | **A customer may cancel only while the order is Not Started.** After the restaurant starts, cancelling is refused. **Confirmed** as the business rule (it also comes from the brief). **Changing a placed order is deliberately not built:** a customer who wants a change cancels and places a new order. See [FUTURE-WORK.md](FUTURE-WORK.md). | `OrderLifecycle` | LIFE-004 |
 | 17 | The restaurant's routes are open to anyone who can reach the service, because there is no authentication. The caller's role comes from the door (`/api/orders` or `/api/restaurant/orders`), not from the request. | `RestaurantController` | API-003 |
 | 18 | The statuses are Not Started, Started, Ready for Pickup and Delivered, plus Cancelled as a final status so a cancelled order can say so. The restaurant moves an order one step forward and cannot cancel. | `OrderLifecycle` | LIFE-001, LIFE-004 |
 | 19 | Asking for the status an order already has succeeds and changes nothing. | `OrderStore` | LIFE-005 |
@@ -153,9 +153,7 @@ a slow response overwriting a newer one, a swallowed error, a wrong state after 
 critical section, and check that the competing request must wait and is then refused. Removing the lock from `Transition` or `Create` now fails
 exactly those tests. Randomised and multi-threaded tests remain as extra coverage.
 
-**What was and was not run** when this was written: the frontend suite, lint, typecheck and production build ran. The backend unit and integration tests ran against the real code,
-using a minimal stand-in for xunit and a stand-in that starts each real app on a local port (NuGet was unreachable), so the stock xunit runner and `WebApplicationFactory` have **not** run. The builder API,
-the order service and the page were run together as three separate processes and driven through a browser and by `scripts/demo-order-service.sh`. Docker Compose and GitHub Actions did **not** run. There is no automated end-to-end test in the repo.
+**What was and was not run.** The AI ran the frontend suite, lint, typecheck and build, and ran the builder API, the order service and the page together in a browser (and `scripts/demo-order-service.sh`), in its own sandbox. It first ran the backend tests through stand-ins for xunit and `WebApplicationFactory`, because NuGet was unreachable there. The maintainer then built and ran the backend tests on Windows with the stock xunit; they pass, after two rounds of fixes that build found (a `Program` type-name collision, then analyzer warnings). `docker compose up` needs Docker Desktop running; its result is not recorded here. GitHub Actions runs on the pull request. There is no automated end-to-end test in the repo.
 
 ## 8. Extensibility
 
@@ -187,8 +185,7 @@ is deterministic and has no new dependency). All versions are pinned exactly.
 are kept because they are short, the invariant check is automatic, and they carry the reasoning forward. If time is tight, keep the registry,
 the pricing tests and ADR-0001, and drop the rest.
 
-**Pre-existing scaffolding that is out of proportion:** PostgreSQL, RabbitMQ and the worker are provisioned but unused, and the README
-roadmap plans an outbox and event consumers. Both conflict with the scope above. They were marked out of scope in the README, not removed.
+**Unused infrastructure removed:** RabbitMQ, PostgreSQL and the placeholder `worker` (with their settings, volumes, Dockerfile and CI steps) were removed because no code used them. A database and a message broker are future work (ADR-0010).
 
 **Commit history.** Suggested sequence: (1) menu injection and promotion rules as data, with backend tests; (2) pricing invariant tests;
 (3) frontend tooling; (4) cart domain and pricing hook with tests; (5) components and UI; (6) invariant registry, ADRs, agent files, CI and
@@ -196,15 +193,14 @@ scripts. Each step builds on its own.
 
 ## 10. Known gaps, in priority order
 
-The decisions behind most of these, and what each would change, are in [ADR-0010](decisions/ADR-0010-decisions-outside-the-scope.md).
+The decisions behind most of these, and what each would change, are in [ADR-0010](decisions/ADR-0010-decisions-outside-the-scope.md). The full backlog is in [FUTURE-WORK.md](FUTURE-WORK.md).
 
-1. **Persistence.** Orders and idempotency keys disappear on restart, so a retry that spans a restart could create a duplicate. SQLite or the existing PostgreSQL, with a unique constraint on the key and a row version.
+1. **Persistence.** Orders and idempotency keys disappear on restart, so a retry that spans a restart could create a duplicate. SQLite, or PostgreSQL added back to Compose, with a unique constraint on the key and a row version.
 2. **More than one service instance.** The lock is in-process; a shared database and transactions would be needed (ADR-0007).
 3. **The restaurant routes have no authentication,** and the restaurant has no screen: it is `scripts/restaurant.sh`, the endpoint, or the optional timer.
 4. **Menu drift between the builder and the service** if they are deployed from different builds. A menu version stamp would detect it.
 5. **Polling instead of push** for status (up to 5 seconds behind).
-6. **Remove unused infrastructure** (RabbitMQ, worker) from the default stack, or build the integration they were meant for.
-7. **Run the pieces not run here:** the stock xunit runner, `WebApplicationFactory`, Compose and CI.
-8. **One error shape across every endpoint** (API-002, planned), and an **automated end-to-end test** of build, order, retry and cancel.
-9. **Changing a placed order,** if the business case holds. See [FUTURE-WORK.md](FUTURE-WORK.md).
-10. Upgrade ESLint (version 9 is no longer supported).
+6. **Confirm Compose and CI are green** on the pull request.
+7. **One error shape across every endpoint** (API-002, planned), and an **automated end-to-end test** of build, order, retry and cancel.
+8. **Changing a placed order,** if the business case holds. See [FUTURE-WORK.md](FUTURE-WORK.md).
+9. **Dependency upgrades** (Vite, Vitest, ESLint). See [DEPENDENCY-NOTES.md](DEPENDENCY-NOTES.md).
