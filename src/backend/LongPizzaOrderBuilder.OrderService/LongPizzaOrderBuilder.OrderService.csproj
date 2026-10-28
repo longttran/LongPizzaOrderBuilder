@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- The order service: a separate process that holds orders and their lifecycle. The order builder talks to it over HTTP. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../LongPizzaOrderBuilder.Pricing/LongPizzaOrderBuilder.Pricing.csproj" />
+  </ItemGroup>
+</Project>

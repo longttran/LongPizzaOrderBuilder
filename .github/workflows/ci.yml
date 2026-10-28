@@ -19,8 +19,10 @@ jobs:
         run: dotnet restore tests/LongPizzaOrderBuilder.UnitTests/LongPizzaOrderBuilder.UnitTests.csproj
       - name: Restore Integration Tests project and dependencies
         run: dotnet restore tests/LongPizzaOrderBuilder.IntegrationTests/LongPizzaOrderBuilder.IntegrationTests.csproj
-      - name: Build API
+      - name: Build the order builder API
         run: dotnet build src/backend/LongPizzaOrderBuilder.Api/LongPizzaOrderBuilder.Api.csproj --configuration Release --no-restore
+      - name: Build the order service
+        run: dotnet build src/backend/LongPizzaOrderBuilder.OrderService/LongPizzaOrderBuilder.OrderService.csproj --configuration Release --no-restore
       - name: Run unit integration tests
         run: dotnet test tests/LongPizzaOrderBuilder.UnitTests/LongPizzaOrderBuilder.UnitTests.csproj --configuration Release --no-restore --verbosity normal
       - name: Run API integration tests
@@ -37,16 +39,31 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
       - run: npm run build
+
+  invariants:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Check that docs/INVARIANTS.md and the tests agree
+        run: node scripts/check-invariants.mjs
 
   container-build:
     runs-on: ubuntu-26.04
-    needs: [backend, frontend]
+    needs: [backend, frontend, invariants]
     steps:
       - uses: actions/checkout@v7
       - name: Build API image
         run: docker build -f deploy/docker/api.Dockerfile -t longpizzaorderbuilder-api:${{ github.sha }} .
+      - name: Build order service image
+        run: docker build -f deploy/docker/orderservice.Dockerfile -t longpizzaorderbuilder-orderservice:${{ github.sha }} .
       - name: Build worker image
         run: docker build -f deploy/docker/worker.Dockerfile -t longpizzaorderbuilder-worker:${{ github.sha }} .
       - name: Build production frontend image
@@ -79,3 +96,6 @@ jobs:
             > /tmp/longpizza-menu.json
             
           python -m json.tool /tmp/longpizza-menu.json
+
+          # The order service is a separate process behind the same site: an unknown order id must be answered by it with a 404.
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8088/api/orders/does-not-exist)" = 404

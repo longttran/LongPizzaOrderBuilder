@@ -1,7 +1,9 @@
 <Solution>
   <Folder Name="/src/" />
   <Folder Name="/src/backend/">
+    <Project Path="src/backend/LongPizzaOrderBuilder.Pricing/LongPizzaOrderBuilder.Pricing.csproj" />
     <Project Path="src/backend/LongPizzaOrderBuilder.Api/LongPizzaOrderBuilder.Api.csproj" />
+    <Project Path="src/backend/LongPizzaOrderBuilder.OrderService/LongPizzaOrderBuilder.OrderService.csproj" />
     <Project Path="src/backend/LongPizzaOrderBuilder.Worker/LongPizzaOrderBuilder.Worker.csproj" />
   </Folder>
   <Folder Name="/tests/">

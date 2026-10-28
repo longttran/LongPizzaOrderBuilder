@@ -15,18 +15,20 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<gl
     }
 
     [Fact]
+    [Trait("Invariant", "PRC-001")]
     public async Task Menu_returns_agreed_prices_and_topping_rates()
     {
         var response = await _client.GetFromJsonAsync<MenuResponse>("/api/menu");
 
         Assert.NotNull(response);
-        Assert.Equal(new[] { 5m, 7m, 12m }, response.Sizes.Select(size => size.Price));
+        Assert.Equal([5m, 7m, 12m], response.Sizes.Select(size => size.Price));
         Assert.Equal(0.065m, response.TaxRate);
         Assert.Equal(0.08m, response.Toppings.Single(topping => topping.Id == "pepperoni").Rate);
         Assert.Equal(0.11m, response.Toppings.Single(topping => topping.Id == "bacon").Rate);
     }
 
     [Fact]
+    [Trait("Invariant", "PRC-011")]
     public async Task Preview_returns_server_calculated_discount_tax_and_total()
     {
         var response = await _client.PostAsJsonAsync("/api/pricing/preview", new
@@ -47,6 +49,7 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<gl
     }
 
     [Fact]
+    [Trait("Invariant", "PRC-014")]
     public async Task Preview_rejects_invalid_size_with_bad_request()
     {
         var response = await _client.PostAsJsonAsync("/api/pricing/preview", new
@@ -62,6 +65,7 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<gl
     }
 
     [Fact]
+    [Trait("Invariant", "ORD-002")]
     public async Task Order_submission_returns_accepted_server_total_and_order_can_be_retrieved()
     {
         var response = await _client.PostAsJsonAsync("/api/orders", new
@@ -91,6 +95,7 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<gl
     }
 
     [Fact]
+    [Trait("Invariant", "ORD-001")]
     public async Task Order_submission_rejects_blank_customer_name_and_empty_order()
     {
         var blankName = await _client.PostAsJsonAsync("/api/orders", new

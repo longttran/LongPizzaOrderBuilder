@@ -1,9 +1,20 @@
-namespace LongPizzaOrderBuilder.Api;
+using System.Globalization;
 
-public sealed class PricingService
+namespace LongPizzaOrderBuilder.Pricing;
+
+/// <summary>
+/// The single source of truth for price. Preview and order submission both call <see cref="Calculate"/>.
+/// All prices, rates, the tax rate and promotion rules come from the injected <see cref="PizzaMenu"/>, so
+/// changing the menu data changes prices without changing this code (invariant PRC-015).
+/// </summary>
+public sealed class PricingService(PizzaMenu menu)
 {
     private const int MaxQuantityPerLine = 10;
+    private const int MaxLinesPerOrder = 50;
     private static readonly MidpointRounding Rounding = MidpointRounding.AwayFromZero;
+
+    /// <summary>Uses the default menu. Kept so existing callers and tests keep working.</summary>
+    public PricingService() : this(PizzaMenu.Default) { }
 
     public PricingPreviewResponse Calculate(PricingPreviewRequest request)
     {
@@ -17,7 +28,6 @@ public sealed class PricingService
             return new PricingPreviewResponse(null, invalidOrderPromotion, errors);
         }
 
-        var menu = PizzaMenu.Default;
         var lines = new List<PricedOrderLine>();
         foreach (var item in request.Items)
         {
@@ -46,7 +56,7 @@ public sealed class PricingService
         return new PricingPreviewResponse(breakdown, promotion, []);
     }
 
-    private static List<string> Validate(PricingPreviewRequest request)
+    private List<string> Validate(PricingPreviewRequest request)
     {
         var errors = new List<string>();
         if (request.Items is null || request.Items.Count == 0)
@@ -54,7 +64,11 @@ public sealed class PricingService
             errors.Add("Add at least one pizza to calculate an order.");
             return errors;
         }
-        var menu = PizzaMenu.Default;
+        if (request.Items.Count > MaxLinesPerOrder)
+        {
+            errors.Add($"An order can have at most {MaxLinesPerOrder} pizza lines.");
+            return errors;
+        }
         for (var i = 0; i < request.Items.Count; i++)
         {
             var item = request.Items[i];
@@ -104,22 +118,36 @@ public sealed class PricingService
         return errors;
     }
 
-    private static PromotionEvaluation EvaluatePromotion(string? code, decimal subtotal)
+    /// <summary>
+    /// Evaluates at most one promotion code against rules read from the menu data. An unknown or ineligible
+    /// code never reduces the total, and a discount can never exceed the subtotal (PRC-007, PRC-008).
+    /// </summary>
+    private PromotionEvaluation EvaluatePromotion(string? code, decimal subtotal)
     {
         if (string.IsNullOrWhiteSpace(code))
             return new PromotionEvaluation(null, false, true, "No promotion selected.", 0m);
         var normalized = code.Trim().ToUpperInvariant();
-        return normalized switch
+        var promotion = menu.Promotions.FirstOrDefault(p => p.Code.Equals(normalized, StringComparison.OrdinalIgnoreCase));
+        if (promotion is null)
+            return new PromotionEvaluation(normalized, false, false, "This promotion code is not recognized.", 0m);
+
+        if (promotion.MinimumSubtotalExclusive is { } minimum && subtotal <= minimum)
+            return new PromotionEvaluation(normalized, false, false, string.Create(CultureInfo.InvariantCulture,
+                $"{promotion.Code} requires a pre-discount subtotal greater than ${minimum:0.00}."), 0m);
+
+        switch (promotion.Type)
         {
-            "ILOVEPIZZA" => new PromotionEvaluation(normalized, true, true,
-                "10% discount applied to the pre-tax subtotal.", Money(subtotal * 0.10m)),
-            "SAVE5" when subtotal > 20m => new PromotionEvaluation(normalized, true, true,
-                "$5 discount applied.", 5.00m),
-            "SAVE5" => new PromotionEvaluation(normalized, false, false,
-                "SAVE5 requires a pre-discount subtotal greater than $20.00.", 0m),
-            _ => new PromotionEvaluation(normalized, false, false,
-                "This promotion code is not recognized.", 0m)
-        };
+            case "Percentage":
+                var percentOff = Math.Min(Money(subtotal * (promotion.Rate ?? 0m)), subtotal);
+                return new PromotionEvaluation(normalized, true, true, string.Create(CultureInfo.InvariantCulture,
+                    $"{(promotion.Rate ?? 0m) * 100:0.##}% discount applied to the pre-tax subtotal."), percentOff);
+            case "FixedAmount":
+                var amountOff = Math.Min(Money(promotion.Amount ?? 0m), subtotal);
+                return new PromotionEvaluation(normalized, true, true, string.Create(CultureInfo.InvariantCulture,
+                    $"${promotion.Amount ?? 0m:0.##} discount applied."), amountOff);
+            default:
+                return new PromotionEvaluation(normalized, false, false, "This promotion is not available.", 0m);
+        }
     }
 
     private static decimal CalculateTip(TipRequest? tip, decimal postTaxAmount)
