@@ -34,7 +34,7 @@ Design principles:
 
 ## Current implementation status
 
-Status reflects the source in this revision; do not infer runtime verification from source inspection alone.
+Status reflects source plus the developer's reported local checks. Local test results are not a substitute for a successful GitHub Actions run.
 
 | Area | Current source status | Notes |
 |---|---|---|
@@ -44,13 +44,13 @@ Status reflects the source in this revision; do not infer runtime verification f
 | `POST /api/orders` | Implemented prototype | Revalidates and reprices before accepting; order storage remains in-memory and is lost on API restart. |
 | `GET /api/orders` and `GET /api/orders/{id}` | Implemented prototype | Lists and retrieves orders in the current API process only. |
 | `GET /health` | Implemented | Used by container health checks. |
-| Local Docker Compose smoke test | Reported successful by developer | Services appeared to start and `/health` returned `Healthy`; automated tests and longer-running health have not yet been confirmed. |
-| Pricing unit tests | Implemented in source | Covers size prices, topping rates, promo threshold, tax, tips, validation, and rounding; execution is pending. |
-| API integration tests | Implemented in source | Exercises menu, preview, validation, order creation, and retrieval through an in-memory test server; execution is pending. |
+| Local Docker Compose smoke test | Reported successful by developer | The developer reports that services started and `/health` returned `Healthy`. Continue with endpoint checks, container logs/restarts, and CI smoke verification. |
+| Pricing unit tests | Implemented and locally verified | xUnit tests cover size prices, topping rates, the `SAVE5` threshold, discount/tax/tip behavior, validation, unknown promotions, and rounding. |
+| API integration tests | Implemented and locally verified | `WebApplicationFactory` exercises menu, preview, invalid requests, order creation, and retrieval through an in-memory test server. |
 | PostgreSQL | Provisioned in Compose | EF Core persistence and migrations are not wired into the order workflow. |
 | RabbitMQ and worker | Provisioned in Compose | Worker currently logs a heartbeat; RabbitMQ publishing/consuming and order events are not implemented. |
 | Self-hosted Compose | Implemented scaffold | Production frontend is served by Nginx, which proxies `/api` to the API. The database and broker are not published on host ports in this profile. |
-| CI | Implemented workflow | Builds API/frontend/container images and runs the test project on GitHub Actions; not yet verified by a CI run. |
+| CI | Workflow scaffold present; verification pending | Intended to build/test backend and frontend, build container images, and run a Compose smoke test. Confirm the workflow uses the current `.slnx` and split test-project paths before relying on it. |
 
 **Important:** this is a development milestone, not a production-ready ordering system. The API currently stores orders only in memory. Do not use it for real orders until durable persistence, migrations, backups, authorization, operational security, and reliable messaging are implemented and verified.
 
@@ -215,29 +215,41 @@ Development endpoints:
 - RabbitMQ management: <http://localhost:15672>
 - PostgreSQL: `localhost:5432`
 
-#### Install the matching .NET SDK on Windows
+#### Verify the .NET SDK
 
-The projects target **.NET 10**. Your screenshots show host SDK `8.0.204`, which explains the `NETSDK1045` restore errors in the editor; it is not a Docker runtime failure. Install the .NET 10 SDK (the SDK includes the runtimes needed for local development) from the [official .NET download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0), or use WinGet in PowerShell:
+The API, Worker, and test projects target **.NET 10**. Install the .NET 10 SDK from the [official .NET download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) if it is not already installed. On Windows, WinGet is also available:
 
 ```powershell
 winget install Microsoft.DotNet.SDK.10
 ```
 
-Restart VS Code and open a new terminal, then verify that a 10.0 SDK is listed:
+Restart VS Code and verify the selected SDK:
 
 ```powershell
 dotnet --list-sdks
 dotnet --version
 ```
 
-The repository's `global.json` selects the .NET 10 SDK family once installed. SDK 8 may remain installed side-by-side; it does not need to be uninstalled. See Microsoft's [Windows installation guide](https://learn.microsoft.com/en-us/dotnet/core/install/windows) if installation or PATH detection fails.
+The repository's `global.json` selects the .NET 10 SDK family. SDKs can be installed side by side. See Microsoft's [Windows installation guide](https://learn.microsoft.com/en-us/dotnet/core/install/windows) if SDK selection or PATH detection fails.
 
-Run backend tests from the repository root after installing the .NET 10 SDK:
+#### Run backend tests
+
+Run these commands from the repository root. The solution includes the API, Worker, and the separate unit and integration test projects:
 
 ```powershell
-dotnet restore tests/LongPizzaOrderBuilder.Tests/LongPizzaOrderBuilder.Tests.csproj
-dotnet test tests/LongPizzaOrderBuilder.Tests/LongPizzaOrderBuilder.Tests.csproj --configuration Release
+dotnet restore .\LongPizzaOrderBuilder.slnx
+dotnet build .\LongPizzaOrderBuilder.slnx --configuration Release --no-restore
+dotnet test .\LongPizzaOrderBuilder.slnx --configuration Release --no-build --no-restore
 ```
+
+For a quick test run, run the projects individually:
+
+```powershell
+dotnet test .\tests\LongPizzaOrderBuilder.UnitTests\LongPizzaOrderBuilder.UnitTests.csproj
+dotnet test .\tests\LongPizzaOrderBuilder.IntegrationTests\LongPizzaOrderBuilder.IntegrationTests.csproj
+```
+
+The local Debug solution test run passed **17 tests (0 failed, 0 skipped)**. Re-run the Release commands above before treating Release configuration or CI as verified.
 
 Build the frontend outside Docker:
 
@@ -366,7 +378,9 @@ Replace the example URL with your real repository URL. Review repository visibil
 - [x] Add `POST /api/pricing/preview` and connect the React UI to the server-calculated preview.
 - [x] Drive displayed size/topping choices from `GET /api/menu`.
 - [x] Add validation for invalid options, duplicate toppings, invalid quantities, and customer name.
-- [x] Add pricing unit tests and API integration tests in source; successful execution is still pending verification.
+- [x] Add separate pricing unit-test and API integration-test projects.
+- [x] Run `dotnet test .\LongPizzaOrderBuilder.slnx` locally: 17 passed, 0 failed, 0 skipped (Debug configuration).
+- [ ] Verify the complete Release build/test sequence and a successful GitHub Actions run.
 
 ### P1 — reliable order lifecycle
 
@@ -487,15 +501,15 @@ Implement tests at three levels: fast domain unit tests, API/DB integration test
 
 ### P0 — API integration tests
 
-- [ ] `GET /api/menu` returns the options and prices used by the server pricing service.
-- [ ] `POST /api/pricing/preview` returns a complete breakdown and does not persist an order.
-- [ ] Preview rejects malformed or incompatible configurations with structured, customer-safe validation errors.
-- [ ] `POST /api/orders` recalculates prices server-side even if the request attempts to include or tamper with client totals.
-- [ ] The accepted order receipt matches the server-calculated preview when menu and rules are unchanged.
+- [x] `GET /api/menu` returns the agreed prices and topping rates.
+- [x] `POST /api/pricing/preview` returns a representative server-calculated discount, tax, and total.
+- [x] Preview rejects an invalid size with HTTP 400.
+- [ ] Add coverage for client-supplied/tampered totals and broader server-side repricing cases.
+- [x] Order creation returns the accepted server total and the created order can be retrieved.
 - [ ] A menu/rule change between preview and submission is handled explicitly; the accepted response returns the authoritative price rather than trusting the old preview.
-- [ ] Order creation persists line items and immutable price snapshots in one transaction.
-- [ ] Repeated requests with the same idempotency key do not create duplicate orders; reusing a key with a materially different request is rejected.
-- [ ] Status retrieval returns the correct lifecycle state, ETA availability, and safe delay/cancellation reasons.
+- [ ] Persistence and immutable price snapshots are not implemented yet; add these tests with PostgreSQL/EF Core.
+- [ ] Idempotency tests remain planned; idempotent submission is not implemented yet.
+- [ ] Lifecycle/status tests remain planned; the full order lifecycle is not implemented yet.
 
 ### P0 — frontend tests
 
@@ -538,6 +552,8 @@ Implement tests at three levels: fast domain unit tests, API/DB integration test
 - Keep pricing unit tests fast and run them on every pull request. Run containerized integration and end-to-end tests in CI with reliable cleanup and isolated data.
 - Seed tests with fixed menu and promotion data. Avoid wall-clock-dependent expiration tests without a controllable clock.
 - Record test commands and actual CI results here only after they have been run. A test checklist is a plan until the corresponding test exists and passes.
+- Current local baseline: `dotnet test .\LongPizzaOrderBuilder.slnx` passed 17 tests, 0 failed, 0 skipped in Debug. Release-mode verification and GitHub Actions remain pending.
+- Priority order: (1) start the full Compose stack locally and verify `/health` plus `/api/menu`; (2) align CI with the `.slnx` and split test-project paths and get a green workflow; (3) deploy the same built images through a controlled CI/CD path; (4) expand tests alongside persistence, messaging, and lifecycle implementation.
 
 ## Decisions still requiring product confirmation
 
@@ -599,6 +615,14 @@ Implement tests at three levels: fast domain unit tests, API/DB integration test
 - Added a first-upload checklist describing which source/configuration/docs/tests/CI files belong in Git, which generated artifacts and local secrets must stay out, how to review the staging area, and how to make and push the initial commit.
 - Corrected the local restore instructions to use the test project directly; this repository does not currently contain `LongPizzaOrderBuilder.sln`.
 - **Still required before first upload:** run a successful `npm install` to create `src/frontend/package-lock.json`, review the staged diff for secrets/artifacts, and verify the actual CI result after pushing.
+
+### 2026-10-28 — Test-project split and local verification
+
+- Split automated backend tests into `tests/LongPizzaOrderBuilder.UnitTests` and `tests/LongPizzaOrderBuilder.IntegrationTests`, both targeting .NET 10 and referencing the API project.
+- Added/organized `LongPizzaOrderBuilder.slnx` to include the API, Worker, and both test projects; corrected namespace/project discovery issues in VS Code.
+- **Locally verified:** `dotnet test .\LongPizzaOrderBuilder.slnx` passed 17 tests with 0 failures and 0 skipped tests. Integration tests exercised menu, pricing preview, invalid requests, order creation, and retrieval using `WebApplicationFactory`.
+- **Reported local Compose check:** the stack started and `/health` returned `Healthy`; follow up with `/api/menu`, container health/log review, and a repeatable smoke check.
+- **Not yet verified:** Release-mode solution build/test, frontend build in the current environment, and a green GitHub Actions run. Ensure `.github/workflows/ci.yml` references the `.slnx` and split test projects; do not treat CI/CD as verified until the workflow passes.
 
 ### Next revision — planned, not yet implemented
 
