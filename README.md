@@ -138,4 +138,4 @@ the restaurant is a script, an endpoint and an optional timer, with no screen or
 ---
 
 More: [design notes and assumptions](docs/DESIGN.md) · [lifecycle](docs/LIFECYCLE.md) · [invariants](docs/INVARIANTS.md) · [decisions](docs/decisions/README.md) · [future work](docs/FUTURE-WORK.md) · [dependency notes](docs/DEPENDENCY-NOTES.md) · [usage audit](docs/USAGE-AUDIT.md) ·
-[AI usage guide](docs/AI-USAGE-GUIDE.md) · [setup and deployment details](docs/OPERATIONS.md) · [original planning notes](docs/PLANNING.md) · [project history](docs/HISTORY.md) · [guidance for AI agents](AGENTS.md)
+[AI usage guide](docs/AI-USAGE-GUIDE.md) · [setup and deployment details](docs/OPERATIONS.md) · [business rules](docs/BUSINESS-RULES.md) · [project history](docs/HISTORY.md) · [guidance for AI agents](AGENTS.md)

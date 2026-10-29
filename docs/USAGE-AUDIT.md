@@ -15,7 +15,7 @@ Two things were removed (the placeholder `worker` and dead CSS); everything else
 | CSS | Every class name against the page's markup | **26 unused rules removed:** 25 in `style.css` (leftovers from the original prototype's hero artwork and similar) and 1 in `components.css`. `style.css` shrank from 10,076 to 7,370 bytes. The page was screenshotted in 5 states at desktop and mobile widths before and after, and all 10 images are byte-for-byte identical |
 | Scripts | Whether the README, CI or another script uses each | All used. `verify.ps1` is the PowerShell twin of `verify.sh` |
 | Config and support files | Whether a tool or document uses each | All used (`.dockerignore` and `LICENSE` by Docker and GitHub directly, `CLAUDE.md` by Claude Code, `.vscode/settings.json` by the editor) |
-| Documents | Whether each is linked from the README or an index | All linked. `PLANNING.md` and `OPERATIONS.md` are archives that still contain passages from before the order service; they were kept on purpose and could be pruned later |
+| Documents | Whether each is linked from the README or an index | All linked. `PLANNING.md` and `OPERATIONS.md` held passages from before the order service; they were then **pruned** (see `HISTORY.md`): `PLANNING.md` became `BUSINESS-RULES.md`, and each file ends with a "Previous iterations" note |
 | Empty folders | Tracked files in every directory | **None in the repository.** Git does not track empty folders at all, so any you see are local leftovers (see below) |
 
 ## Empty folders on your machine

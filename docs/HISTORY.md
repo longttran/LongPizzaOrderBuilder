@@ -24,6 +24,12 @@
 
 ## Revision history
 
+### 2026-10-28 — Archived planning notes pruned
+- **`PLANNING.md` became `BUSINESS-RULES.md`** (373 lines to 134). It keeps the goals, the business rules the code implements, and the intended order-builder behavior. Removed as outdated: the early status table, the single-process endpoint list, the domain-model sketch, the architecture table, the roadmap, the lifecycle design (Delayed state, ETA, events), the 14 invariants and the test checklist. Each is mapped to what replaced it in the "Previous iterations" section, together with the answers to the open product questions.
+- **`OPERATIONS.md` pruned** (186 lines to 130): removed the first-commit walkthrough, the "17 tests" baseline and the claim that linting was not enforced; added a short "What belongs in the repository" list and a "Previous iterations" note.
+- Nothing was lost: the earlier text is in Git history.
+- **Stray files removed:** two `.patch` files that had been committed at the repository root, and `*.patch`, `*.rej` and `*.orig` are now git-ignored.
+
 ### 2026-10-28 — Infrastructure trimmed, rule confirmed, dependency and AI-usage notes
 - **RabbitMQ and PostgreSQL removed** from `compose.yaml`, `compose.selfhost.yaml`, `.env.example` and the CI smoke test, with the settings, volumes and `depends_on` entries that went with them. No code used either. If you ran the old stack, use `docker compose up --build --remove-orphans` once.
 - **Usage audit:** the placeholder `worker` (project, Dockerfile, two compose services, a CI image build and its solution entry) and 26 unused CSS rules (25 prototype leftovers in `style.css`, one in `components.css`) were removed. Everything else was checked and is used; see `docs/USAGE-AUDIT.md`.
@@ -44,7 +50,7 @@
 - **Changing a placed order was prototyped and then deferred.** It needs a design discussion and a business discussion to justify it; the questions, the starting design and the withdrawn invariants (ORD-005, ORD-006, UI-018) are in `docs/FUTURE-WORK.md`. A customer can cancel and place a new order.
 - **Restaurant side:** `/api/restaurant/orders` (list, transition), `scripts/restaurant.sh`, and an optional timer. New scripts: `dev.sh`, `seed.sh`, `demo-order-service.sh` (replaces `demo-lifecycle.sh`).
 - **Invariants:** registry rewritten for the service (46 rules, 45 enforced). Race tests freeze one request mid-change; removing the lock from `Transition` or `Create` fails them.
-- **Docs:** the README is now two parts (run, API and tests; then the design in one page). The old README was split into `PLANNING.md`, `OPERATIONS.md` and this file. `LIFECYCLE.md` and `DESIGN.md` rewritten for the service; ADR-0009, ADR-0010 and `FUTURE-WORK.md` added.
+- **Docs:** the README is now two parts (run, API and tests; then the design in one page). The old README was split into `PLANNING.md` (later pruned and renamed `BUSINESS-RULES.md`), `OPERATIONS.md` and this file. `LIFECYCLE.md` and `DESIGN.md` rewritten for the service; ADR-0009, ADR-0010 and `FUTURE-WORK.md` added.
 - **Verified where authored:** backend 77 tests (unit, and both back ends over real HTTP) through stand-ins for xunit and `WebApplicationFactory`; frontend 77 tests, lint, typecheck and build; the three processes driven through a browser. **Not run:** the stock xunit runner, Docker Compose, CI.
 
 ### 2026-10-28 — Order lifecycle, safe retries and race handling

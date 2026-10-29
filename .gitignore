@@ -28,3 +28,8 @@ pnpm-debug.log*
 Thumbs.db
 .vscode/*
 !.vscode/settings.json
+
+# Patch files used to move changes around are not part of the project.
+*.patch
+*.rej
+*.orig

@@ -1,8 +1,7 @@
 # Setup, local development and deployment (detailed)
 
-> Moved from the README. The short version (run both processes, run the tests) is in the [README](../README.md). Parts of this
-> predate the separate order service: where a step mentions only the API on port 8080, the order service now also runs on port 8090
-> (see `compose.yaml` and `scripts/dev.sh`).
+> The short version (run everything, run the tests) is in the [README](../README.md). This page has the detail: prerequisites, the .NET SDK, running the tests, editor conventions, self-hosting and cloud notes.
+> The page, the builder API (port 8080) and the order service (port 8090) all start from `compose.yaml` or `scripts/dev.sh`. Earlier material (the first-commit walkthrough and the initial smoke-test status) is summarised in [Previous iterations](#previous-iterations) at the end.
 
 ## Local development
 
@@ -65,13 +64,11 @@ dotnet test .\tests\LongPizzaOrderBuilder.UnitTests\LongPizzaOrderBuilder.UnitTe
 dotnet test .\tests\LongPizzaOrderBuilder.IntegrationTests\LongPizzaOrderBuilder.IntegrationTests.csproj
 ```
 
-The local Debug solution test run passed **17 tests (0 failed, 0 skipped)**. Re-run the Release commands above before treating Release configuration or CI as verified.
-
 Build the frontend outside Docker:
 
 ```bash
 cd src/frontend
-npm install --no-audit --no-fund
+npm ci --no-audit --no-fund
 npm run build
 ```
 
@@ -83,10 +80,10 @@ For VS Code:
 
 - Install the Microsoft **C# Dev Kit** extension and keep VS Code/the extension current for .NET 10 support.
 - Enable **Editor: Format On Save** if desired. C# formatting is provided by the C# tooling; `.editorconfig` provides the shared rules.
-- For the frontend, use **Prettier** to format TypeScript/TSX, JSON, CSS, and Markdown. The repository does not currently declare Prettier or ESLint as dependencies, so frontend linting is not yet enforced by an npm script or CI. Add and pin those tools, add `format`, `format:check`, and `lint` scripts, and run them in CI before treating linting as a quality gate.
+- For the frontend, **ESLint** is configured and enforced (`npm run lint`, and in CI). **Prettier** is not a dependency; if you use it in your editor, do not reformat files you are not otherwise changing.
 - If VS Code does not pick up `.editorconfig`, run **Developer: Reload Window** and check that the relevant language formatter extension is enabled.
 
-Suggested frontend tools: [Prettier](https://prettier.io/) for consistent formatting and [ESLint](https://eslint.org/) with the TypeScript and React hooks plugins for code-quality rules. Avoid adding auto-fix rules that silently alter behavior without reviewing the diff.
+Frontend tests and the type check run with `npm test` and `npm run typecheck`; see the [README](../README.md).
 
 ### Self-host with production-style containers
 
@@ -113,74 +110,21 @@ Self-hosting notes:
 
 Keep application images provider-neutral and configuration in environment variables/secrets. Once a cloud is selected, choose a managed container runtime and, once persistence is built, a managed database; add registry publishing, secret integration, TLS/domain configuration, backups, monitoring, and deployment/rollback automation. Do not commit to Azure, AWS, or Google Cloud-specific services until the deployment requirements and budget are clearer.
 
-## First Git repository upload
+## What belongs in the repository
 
-This repository is intended to contain **source code, tests, deployment/configuration files, developer instructions, and CI workflows**—not generated build output, local secrets, or runtime data.
+Source code, tests, deployment and configuration files, scripts, documents and CI workflows. Not generated or local files. The root `.gitignore` already excludes `.env`, .NET `bin/` and `obj/`, test results, `node_modules/`, frontend `dist/`, coverage output, IDE state and OS metadata.
 
-### Files to include
+- Commit: `src/`, `tests/`, `deploy/`, `scripts/`, `docs/`, the Compose files, `.github/workflows/`, `.env.example`, `.editorconfig`, `.gitattributes`, `global.json`, `.vscode/settings.json` (shared workspace settings only) and `src/frontend/package-lock.json`.
+- Do not commit: `.env` or any secret, build output, `node_modules/`, logs, patch files, or ZIP archives of the project.
+- Before committing, review `git status` and `git diff --cached`.
 
-Commit the project files that are part of the repository, including:
+## Previous iterations
 
-- `README.md`, `.gitignore`, `.gitattributes`, `.editorconfig`, `global.json`, and `.env.example`.
-- `src/`, `tests/`, `deploy/`, `scripts/`, and the Compose files.
-- `.github/workflows/` so CI runs on the remote repository.
-- `.vscode/settings.json` for shared workspace formatting preferences (personal extensions and machine-specific settings should not be committed).
-- `src/frontend/package-lock.json` **after generating it with a successful npm install**. Commit the lockfile so dependency versions are reproducible; do not commit `node_modules/`.
+Removed from this page because they no longer apply; the full text is in Git history (`git log --follow docs/OPERATIONS.md`).
 
-### Do not upload
-
-The root `.gitignore` excludes common generated or local-only content, including `.env` and other environment-specific secret files, .NET `bin/` and `obj/`, test results, Node `node_modules/`, frontend `dist/`, coverage output, IDE state, and OS metadata. Keep `.env.example` as a template with placeholders only. Do not commit passwords, tokens, production connection strings, database dumps, RabbitMQ/PostgreSQL data volumes, logs, or exported artifacts.
-
-Dockerfiles, Compose manifests, source files, tests, and CI configuration are **not artifacts**; they are required project inputs and should be committed. Do not commit ZIP archives of the project inside the repository.
-
-### Prepare and inspect the first commit
-
-Before staging, stop local services if desired and ensure `.env` contains only local settings. From the repository root in PowerShell:
-
-```powershell
-# Generate the frontend lockfile (requires network access to npm).
-cd src/frontend
-npm install --no-audit --no-fund
-cd ../..
-
-# Review what Git sees before staging anything.
-git init
-git status --short
-git check-ignore -v .env src/backend/LongPizzaOrderBuilder.Api/obj src/frontend/node_modules
-
-# Stage the project and inspect the exact upload set.
-git add .
-git status --short
-git diff --cached --stat
-git diff --cached --check
-git diff --cached
-```
-
-**Do not commit until you have inspected the staged diff.** Confirm that `.env`, credentials, generated directories, local database data, and ZIP files are absent. If a secret is accidentally staged, unstage it and remove it from the index before committing; if it was already committed or pushed, rotate the secret because deleting it in a later commit does not erase history.
-
-Once the staged files look correct, make the initial commit:
-
-```powershell
-git commit -m "Initial LongPizzaOrderBuilder project"
-```
-
-Create an empty repository on your Git hosting provider (for example, GitHub); do not initialize it with a second README or license if you already have those locally. Then add the provider's repository URL and push the initial branch using the commands shown by that provider. For GitHub, the usual shape is:
-
-```powershell
-git branch -M main
-git remote add origin https://github.com/YOUR-ACCOUNT/LongPizzaOrderBuilder.git
-git push -u origin main
-```
-
-Replace the example URL with your real repository URL. Review repository visibility and access before pushing; choose private if you do not intend the code and project history to be public.
-
-### First-upload verification checklist
-
-- [ ] `.env.example` contains placeholders only; `.env` is ignored.
-- [ ] `.gitignore`, `.gitattributes`, `.editorconfig`, and `global.json` are present.
-- [ ] `src/frontend/package-lock.json` is committed; `node_modules/` is not.
-- [ ] Source, tests, Docker/Compose configuration, scripts, README, and CI workflow are included.
-- [ ] No build output, test results, logs, database volumes/dumps, secrets, or project ZIP archives are staged.
-- [ ] `git diff --cached --check` reports no whitespace errors.
-- [ ] The first commit is created only after reviewing the staged diff.
-- [ ] After pushing, the GitHub Actions workflow result is checked and recorded in this README.
+| Earlier content | Why it was removed |
+|---|---|
+| A step-by-step first-commit and first-push walkthrough, with a "first upload" checklist | The repository exists and has history. The short list above covers what still matters |
+| A note that the local Debug test run passed 17 tests | Out of date: the suites are far larger and are described in [DESIGN.md](DESIGN.md) section 7 |
+| A note that ESLint and Prettier were not declared and linting was not enforced | ESLint is now declared, runs through `npm run lint`, and runs in CI |
+| Endpoints and service credentials for PostgreSQL and RabbitMQ | Both were removed from Compose because nothing used them ([ADR-0010](decisions/ADR-0010-decisions-outside-the-scope.md)) |
