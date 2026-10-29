@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
 
+using LongPizzaOrderBuilder.Pricing;
+
 namespace LongPizzaOrderBuilder.Api.Controllers;
 
 [ApiController]
 [Route("api/menu")]
-public sealed class MenuController : ControllerBase
+public sealed class MenuController(PizzaMenu menu) : ControllerBase
 {
     [HttpGet]
-    public ActionResult<PizzaMenu> Get() => Ok(PizzaMenu.Default);
+    public ActionResult<PizzaMenu> Get() => Ok(menu);
 }

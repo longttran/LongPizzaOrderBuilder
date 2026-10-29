@@ -1,5 +1,7 @@
-using LongPizzaOrderBuilder.Api;
+using LongPizzaOrderBuilder.Pricing;
 
+// The order builder's API: the menu and the live price preview. It holds no orders.
+// Orders are sent to the separate order service (src/backend/LongPizzaOrderBuilder.OrderService).
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -9,8 +11,8 @@ var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get
     ?? ["http://localhost:5173"];
 builder.Services.AddCors(options => options.AddPolicy("frontend", policy =>
     policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
+builder.Services.AddSingleton(PizzaMenu.Default);
 builder.Services.AddSingleton<PricingService>();
-builder.Services.AddSingleton<PizzaOrderStore>();
 
 var app = builder.Build();
 if (app.Environment.IsDevelopment()) app.MapOpenApi();

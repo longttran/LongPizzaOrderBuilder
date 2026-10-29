@@ -5,6 +5,9 @@ RUN npm install
 COPY src/frontend/ ./
 ARG VITE_API_BASE_URL=
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+# Empty means same-origin: Nginx routes /api/orders to the order service and everything else under /api to the order builder's API.
+ARG VITE_ORDER_SERVICE_URL=
+ENV VITE_ORDER_SERVICE_URL=${VITE_ORDER_SERVICE_URL}
 RUN npm run build
 
 FROM nginx:1.28-alpine AS final

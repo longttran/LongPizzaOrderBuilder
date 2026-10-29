@@ -1,5 +1,6 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
+COPY src/backend/LongPizzaOrderBuilder.Pricing/LongPizzaOrderBuilder.Pricing.csproj src/backend/LongPizzaOrderBuilder.Pricing/
 COPY src/backend/LongPizzaOrderBuilder.Api/LongPizzaOrderBuilder.Api.csproj src/backend/LongPizzaOrderBuilder.Api/
 RUN dotnet restore src/backend/LongPizzaOrderBuilder.Api/LongPizzaOrderBuilder.Api.csproj
 COPY src/backend/ src/backend/

@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 
+using LongPizzaOrderBuilder.Pricing;
+
 namespace LongPizzaOrderBuilder.Api.Controllers;
 
 [ApiController]

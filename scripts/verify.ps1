@@ -1,14 +1,26 @@
 $ErrorActionPreference = 'Stop'
 
 Write-Host '== .NET unit and API integration tests ==' -ForegroundColor Cyan
-dotnet test tests/LongPizzaOrderBuilder.Tests/LongPizzaOrderBuilder.Tests.csproj --configuration Release
-if ($LASTEXITCODE -ne 0) { throw 'dotnet test failed.' }
+dotnet test tests/LongPizzaOrderBuilder.UnitTests/LongPizzaOrderBuilder.UnitTests.csproj --configuration Release
+if ($LASTEXITCODE -ne 0) { throw 'unit tests failed.' }
+dotnet test tests/LongPizzaOrderBuilder.IntegrationTests/LongPizzaOrderBuilder.IntegrationTests.csproj --configuration Release
+if ($LASTEXITCODE -ne 0) { throw 'integration tests failed.' }
+
+Write-Host '== Invariant registry matches the tests ==' -ForegroundColor Cyan
+node scripts/check-invariants.mjs
+if ($LASTEXITCODE -ne 0) { throw 'invariant check failed.' }
 
 Write-Host '== Frontend dependency install and production build ==' -ForegroundColor Cyan
 Push-Location src/frontend
 try {
-    npm install --no-audit --no-fund
-    if ($LASTEXITCODE -ne 0) { throw 'npm install failed.' }
+    npm ci --no-audit --no-fund
+    if ($LASTEXITCODE -ne 0) { throw 'npm ci failed.' }
+    npm run typecheck
+    if ($LASTEXITCODE -ne 0) { throw 'typecheck failed.' }
+    npm run lint
+    if ($LASTEXITCODE -ne 0) { throw 'lint failed.' }
+    npm test
+    if ($LASTEXITCODE -ne 0) { throw 'frontend tests failed.' }
     npm run build
     if ($LASTEXITCODE -ne 0) { throw 'npm run build failed.' }
 }
