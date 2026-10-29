@@ -1,6 +1,6 @@
 # LongPizzaOrderBuilder
 
-Build a pizza order in a web page, watch the total update, then send it to a separate **order service** that holds the order and its lifecycle. One restaurant, anonymous customers.
+Build a pizza order in a web page, watch the total update, then send it to a separate **order service** that holds the order and its lifecycle. One restaurant, anonymous customers.  Design was based on [design notes and assumptions](docs/DESIGN.md).
 Not built, on purpose: authentication or accounts, real payments, kitchen or delivery integration, a menu admin UI, multiple locations.
 
 | Process | Role | Port |
@@ -135,7 +135,14 @@ the restaurant is a script, an endpoint and an optional timer, with no screen or
 **Next, in order:** (1) persistence with a unique key (SQLite, or PostgreSQL added back); (2) authenticate the restaurant routes; (3) a restaurant screen and push updates; (4) a menu version on every price; (5) promo stacking; (6) one error shape (API-002);
 (7) changing a placed order, if the business case holds; (8) dependency upgrades. The full backlog is [`docs/FUTURE-WORK.md`](docs/FUTURE-WORK.md); the reasons are in [`docs/decisions/ADR-0010`](docs/decisions/ADR-0010-decisions-outside-the-scope.md).
 
+## 5. AI Usage
+I used Claude Sonnet 5.5, in the Claude desktop client to write the code, tests and documentation, and to build, run and test them in its own sandbox. 
+
+One thing I had to fix: After Claude designed the order lifecycle, I tested building the changes and the build failed after 'dotnet build.' 
+
+One thing I checked myself rather than trusting it: I confirmed that an order received by a restaurant is not cancelable when the restaurant starts.  This is confirmed by executing 'docker compose up' from the root directory of the repo, placing an order from the UI, and attempting to cancel the order after the restart starts it.  If the order is canceled by the customer if it's not started, then the cancel wins.
+
+I included automation for invariants where the order lifecycle was most important.  This included placing the order, starting it, and ensuring the order was ready to deliver.  Canceling orders was also implemented.  Changes are not because the rules are complex and require business discussion to realize this feature.
 ---
 
-More: [design notes and assumptions](docs/DESIGN.md) · [lifecycle](docs/LIFECYCLE.md) · [invariants](docs/INVARIANTS.md) · [decisions](docs/decisions/README.md) · [future work](docs/FUTURE-WORK.md) · [dependency notes](docs/DEPENDENCY-NOTES.md) · [usage audit](docs/USAGE-AUDIT.md) ·
-[AI usage guide](docs/AI-USAGE-GUIDE.md) · [setup and deployment details](docs/OPERATIONS.md) · [business rules](docs/BUSINESS-RULES.md) · [project history](docs/HISTORY.md) · [guidance for AI agents](AGENTS.md)
+More: [design notes and assumptions](docs/DESIGN.md) · [lifecycle](docs/LIFECYCLE.md) · [invariants](docs/INVARIANTS.md) · [decisions](docs/decisions/README.md) · [future work](docs/FUTURE-WORK.md) · [dependency notes](docs/DEPENDENCY-NOTES.md) · [usage audit](docs/USAGE-AUDIT.md) · [setup and deployment details](docs/OPERATIONS.md) · [business rules](docs/BUSINESS-RULES.md) · [project history](docs/HISTORY.md) · [guidance for AI agents](AGENTS.md)
